@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { MessageCircle } from "lucide-react";
 import { finishEmbeddedSignup } from "@/lib/whatsapp/actions";
+import type { EmbeddedSignupSetup } from "@/lib/whatsapp/embedded-signup-prefill";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/misc";
 
@@ -48,7 +49,23 @@ type Status = { kind: "idle" } | { kind: "working" } | { kind: "error"; message:
  * le `code` (callback FB.login) ainsi que `phone_number_id` / `waba_id` (message de la fenêtre), puis appelle
  * l'action serveur qui finalise la connexion. Aucun identifiant à copier-coller côté marchand.
  */
-export function EmbeddedSignupButton({ storeId, appId, configId, version }: { storeId: string; appId: string; configId: string; version: string }) {
+export function EmbeddedSignupButton({
+  storeId,
+  appId,
+  configId,
+  version,
+  setup = {},
+  connected = false,
+}: {
+  storeId: string;
+  appId: string;
+  configId: string;
+  version: string;
+  /** Pré-remplissage de la fenêtre Meta (infos de la boutique). */
+  setup?: EmbeddedSignupSetup;
+  /** Un numéro est déjà connecté : le bouton sert à changer de numéro. */
+  connected?: boolean;
+}) {
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [status, setStatus] = useState<Status>({ kind: "idle" });
@@ -136,10 +153,10 @@ export function EmbeddedSignupButton({ storeId, appId, configId, version }: { st
         response_type: "code",
         override_default_response_type: true,
         // version v4 : doit correspondre à la configuration Embedded Signup créée chez Meta (« ES Config », v4).
-        extras: { setup: {}, featureType: "", sessionInfoVersion: "3", version: "v4" },
+        extras: { setup, featureType: "", sessionInfoVersion: "3", version: "v4" },
       },
     );
-  }, [configId, router, storeId]);
+  }, [configId, router, setup, storeId]);
 
   return (
     <div className="space-y-4">
@@ -151,12 +168,13 @@ export function EmbeddedSignupButton({ storeId, appId, configId, version }: { st
       />
       {status.kind === "error" && <Alert tone="danger" title="Connexion impossible">{status.message}</Alert>}
       {status.kind === "done" && <Alert tone="success" title="Numéro connecté">{status.message}</Alert>}
-      <Button type="button" variant="primary" onClick={launch} loading={status.kind === "working"} disabled={!ready}>
-        <MessageCircle className="size-4" aria-hidden /> Connecter avec WhatsApp
+      <Button type="button" variant={connected ? "secondary" : "primary"} onClick={launch} loading={status.kind === "working"} disabled={!ready}>
+        <MessageCircle className="size-4" aria-hidden /> {connected ? "Changer de numéro" : "Connecter avec WhatsApp"}
       </Button>
       <p className="text-xs leading-relaxed text-ink-muted">
-        Vous serez redirigé vers Meta pour autoriser Axi à envoyer des messages depuis votre numéro WhatsApp Business.
-        Aucun identifiant à recopier : tout est configuré automatiquement.
+        {connected
+          ? "Pour connecter un autre numéro, relancez la fenêtre Meta : le nouveau numéro remplacera l'actuel."
+          : "Une fenêtre Meta s'ouvre, déjà pré-remplie avec les informations de votre boutique : connectez-vous à Facebook, vérifiez-les, puis saisissez le code reçu par SMS. Aucun identifiant à recopier."}
       </p>
     </div>
   );

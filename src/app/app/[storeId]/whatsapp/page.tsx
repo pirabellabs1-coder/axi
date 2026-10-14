@@ -21,6 +21,7 @@ import { GRAPH_VERSION } from "@/lib/social/graph-client";
 import { WhatsappForm } from "./whatsapp-form";
 import { CloudApiForm } from "./cloud-api-form";
 import { EmbeddedSignupButton } from "./embedded-signup";
+import { buildEmbeddedSignupSetup } from "@/lib/whatsapp/embedded-signup-prefill";
 import { MessagePreview } from "./message-preview";
 
 export const metadata: Metadata = { title: "WhatsApp" };
@@ -70,6 +71,12 @@ export default async function WhatsappPage({ params }: { params: Promise<{ store
   const cfg = (integration?.config ?? {}) as { phoneNumberId?: string; wabaId?: string; source?: string };
   const status = integration?.status ?? "inactive";
   const partner = partnerModeConfig();
+  const esSetup = buildEmbeddedSignupSetup({
+    store,
+    email: ctx.user.email,
+    website: process.env.NEXT_PUBLIC_APP_URL ? `${process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "")}/s/${store.slug}` : null,
+    dialCode: getCountry(store.country).dialCode,
+  });
   const connectedViaPartner = cfg.source === "embedded_signup";
   const clicks = eventClicks + cartClicks;
   const conversion = clicks > 0 ? Math.round((waOrders / clicks) * 100) : null;
@@ -161,10 +168,10 @@ export default async function WhatsappPage({ params }: { params: Promise<{ store
                         <Alert tone="success" title="Numéro connecté">
                           Votre numéro WhatsApp Business est connecté via le mode partenaire. Les messages partent depuis votre numéro.
                         </Alert>
-                        <EmbeddedSignupButton storeId={store.id} appId={partner.appId} configId={partner.configId} version={GRAPH_VERSION} />
+                        <EmbeddedSignupButton storeId={store.id} appId={partner.appId} configId={partner.configId} version={GRAPH_VERSION} setup={esSetup} connected />
                       </div>
                     ) : (
-                      <EmbeddedSignupButton storeId={store.id} appId={partner.appId} configId={partner.configId} version={GRAPH_VERSION} />
+                      <EmbeddedSignupButton storeId={store.id} appId={partner.appId} configId={partner.configId} version={GRAPH_VERSION} setup={esSetup} />
                     )}
                   </CardBody>
                 </Card>
