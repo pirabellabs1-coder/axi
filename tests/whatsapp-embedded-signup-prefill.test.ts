@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildEmbeddedSignupSetup, metaTimezone, splitPhone } from "@/lib/whatsapp/embedded-signup-prefill";
+import { buildEmbeddedSignupSetup, metaBusinessCategory, metaTimezone, splitPhone } from "@/lib/whatsapp/embedded-signup-prefill";
 
 describe("metaTimezone", () => {
   it("convertit un fuseau IANA au format Meta", () => {
@@ -27,13 +27,14 @@ describe("splitPhone", () => {
 describe("buildEmbeddedSignupSetup", () => {
   it("pré-remplit entreprise et numéro à partir de la boutique", () => {
     const setup = buildEmbeddedSignupSetup({
-      store: { name: "Maison Kairos", tagline: "Mode et accessoires", city: "Cotonou", address: "Rue 12", country: "BJ", timezone: "Africa/Porto-Novo", whatsappNumber: "22997000000" },
+      store: { name: "Maison Kairos", category: "fashion", tagline: "Mode et accessoires", city: "Cotonou", address: "Rue 12", country: "BJ", timezone: "Africa/Porto-Novo", whatsappNumber: "22997000000" },
       email: "marchand@exemple.com",
       website: "https://16-192-144-250.nip.io/s/maison-kairos",
       dialCode: "229",
     });
     expect(setup).toEqual({
       business: {
+        id: null,
         name: "Maison Kairos",
         email: "marchand@exemple.com",
         website: "https://16-192-144-250.nip.io/s/maison-kairos",
@@ -41,7 +42,7 @@ describe("buildEmbeddedSignupSetup", () => {
         address: { streetAddress1: "Rue 12", city: "Cotonou", country: "BJ" },
         timezone: "UTC+01:00",
       },
-      phone: { displayName: "Maison Kairos", description: "Mode et accessoires" },
+      phone: { displayName: "Maison Kairos", category: "APPAREL", description: "Mode et accessoires" },
     });
   });
 
@@ -52,9 +53,19 @@ describe("buildEmbeddedSignupSetup", () => {
       website: "http://insecure.example",
       dialCode: "229",
     });
-    expect(setup.business).toEqual({ name: "Boutique", address: { country: "BJ" } });
+    expect(setup.business).toEqual({ id: null, name: "Boutique", address: { country: "BJ" } });
     expect(setup.business?.email).toBeUndefined();
     expect(setup.business?.website).toBeUndefined();
-    expect(setup.phone).toEqual({ displayName: "Boutique" });
+    // Profil complet exigé par Meta : catégorie par défaut OTHER, description générée.
+    expect(setup.phone).toEqual({ displayName: "Boutique", category: "OTHER", description: "Boutique en ligne Boutique" });
+  });
+});
+
+describe("metaBusinessCategory", () => {
+  it("associe les catégories Axi à la liste Meta, OTHER par défaut", () => {
+    expect(metaBusinessCategory("food")).toBe("RESTAURANT");
+    expect(metaBusinessCategory("beauty")).toBe("BEAUTY");
+    expect(metaBusinessCategory("inconnue")).toBe("OTHER");
+    expect(metaBusinessCategory(null)).toBe("OTHER");
   });
 });

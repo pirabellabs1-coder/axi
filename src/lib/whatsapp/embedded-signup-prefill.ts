@@ -6,6 +6,7 @@
 
 export type PrefillStore = {
   name: string;
+  category?: string | null; // catégorie Axi (STORE_CATEGORIES)
   description?: string | null;
   tagline?: string | null;
   city?: string | null;
@@ -17,6 +18,8 @@ export type PrefillStore = {
 
 export type EmbeddedSignupSetup = {
   business?: {
+    /** Toujours null : Axi ne connaît pas le portefeuille Meta du marchand (champ attendu par Meta). */
+    id?: null;
     name?: string;
     email?: string;
     website?: string;
@@ -24,8 +27,25 @@ export type EmbeddedSignupSetup = {
     address?: { streetAddress1?: string; city?: string; country?: string };
     timezone?: string;
   };
-  phone?: { displayName?: string; description?: string };
+  /** Profil du numéro : Meta exige les trois champs ensemble. */
+  phone?: { displayName: string; category: string; description: string };
 };
+
+/** Catégorie Axi → catégorie de profil WhatsApp Business (liste fermée Meta). */
+const META_CATEGORY: Record<string, string> = {
+  general: "RETAIL",
+  food: "RESTAURANT",
+  fashion: "APPAREL",
+  beauty: "BEAUTY",
+  electronics: "RETAIL",
+  home: "RETAIL",
+  grocery: "GROCERY",
+  services: "PROF_SERVICES",
+};
+
+export function metaBusinessCategory(category: string | null | undefined): string {
+  return (category && META_CATEGORY[category]) || "OTHER";
+}
 
 /** Décalage UTC d'un fuseau IANA au format attendu par Meta (« UTC+01:00 »), ou undefined. */
 export function metaTimezone(tz: string | null | undefined, at: Date = new Date()): string | undefined {
@@ -68,6 +88,7 @@ export function buildEmbeddedSignupSetup(input: { store: PrefillStore; email?: s
     country: /^[A-Z]{2}$/.test(store.country) ? store.country : undefined,
   });
   const business: NonNullable<EmbeddedSignupSetup["business"]> = {
+    id: null,
     name: clip(store.name, 100),
     email: input.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email) ? input.email : undefined,
     website: input.website && /^https:\/\//.test(input.website) ? input.website : undefined,
@@ -75,14 +96,17 @@ export function buildEmbeddedSignupSetup(input: { store: PrefillStore; email?: s
     address: Object.keys(address).length ? address : undefined,
     timezone: metaTimezone(store.timezone),
   };
-  const phone = {
-    displayName: clip(store.name, 100),
-    description: clip(store.tagline || store.description, 256),
-  };
+  const displayName = clip(store.name, 100);
+  const phone = displayName
+    ? {
+        displayName,
+        category: metaBusinessCategory(store.category),
+        description: clip(store.tagline || store.description, 512) ?? `Boutique en ligne ${displayName}`.slice(0, 512),
+      }
+    : undefined;
   const out: EmbeddedSignupSetup = {};
   const b = prune(business);
-  if (Object.keys(b).length) out.business = b;
-  const p = prune(phone);
-  if (Object.keys(p).length) out.phone = p;
+  if (Object.keys(b).some((k) => k !== "id")) out.business = b;
+  if (phone) out.phone = phone;
   return out;
 }
