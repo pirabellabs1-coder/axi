@@ -64,8 +64,9 @@ export function StoreWizard({ domain, countries, zoneLabel, firstStore, trial, d
   const effectiveSlug = slugTouched ? slug : slugify(name);
   const avail: Avail = effectiveSlug.length >= 3 && checked?.slug === effectiveSlug ? checked.res : null;
   const selectedCountry = countries.find((c) => c.code === country) ?? countries[0];
-  const zone: Zone = selectedCountry?.zone ?? "AFRICA";
   const currency = currencyChoice ?? defaultStoreCurrency(country, selectedCountry?.currency);
+  // Zone tarifaire Axi : suit la devise choisie (même règle que zoneForCurrency côté serveur).
+  const zone: Zone = currency === "XOF" || currency === "XAF" ? "AFRICA" : "WORLD";
   const sectorOption = getSector(sector);
 
   // Disponibilité de l'adresse (anti-rebond). Le résultat n'est valable que pour l'adresse vérifiée.
@@ -241,7 +242,7 @@ export function StoreWizard({ domain, countries, zoneLabel, firstStore, trial, d
 
           {step === 2 && (
             <section aria-labelledby="step-title" className="animate-fade-in">
-              <StepTitle ref={headingRef} title="Où vendez-vous ?" sub="Le pays fixe l'indicatif WhatsApp et votre zone tarifaire Axi. Choisissez la devise de vos prix." />
+              <StepTitle ref={headingRef} title="Où vendez-vous ?" sub="Le pays fixe l'indicatif WhatsApp. La devise choisie fixe vos prix et le tarif de votre abonnement Axi." />
               <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <Field id="country" label="Pays" error={errors.country} required>
                   {(p) => (

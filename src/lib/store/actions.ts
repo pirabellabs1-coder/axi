@@ -76,8 +76,9 @@ export async function createStore(_prev: ActionResult | undefined, formData: For
     if (!quota.allowed) return fail(quotaMessage(quota));
 
     const c = getCountry(country);
-    // Zone tarifaire Axi : suit le PAYS (devise usuelle du pays), pas la devise choisie pour les prix.
-    const zone = zoneForCurrency(c.currency);
+    // Zone tarifaire Axi : suit la DEVISE choisie pour la boutique (plateforme internationale) — une boutique en EUR
+    // voit et paie les offres Axi en EUR, une boutique en XOF/XAF en FCFA.
+    const zone = zoneForCurrency(currency);
     const billingCurrency = ZONE_CURRENCY[zone];
     const now = new Date();
 
@@ -185,6 +186,13 @@ export async function changeStoreCurrency(_prev: ActionResult | undefined, formD
       if (off.length) await tx.paymentMethod.updateMany({ where: { storeId, id: { in: off } }, data: { active: false } });
       await tx.storeCurrency.deleteMany({ where: { storeId, currency: to } });
       await tx.store.update({ where: { id: storeId }, data: { currency: to } });
+      // Les offres Axi suivent la devise : tant qu'aucun abonnement payant n'est en cours (essai ou gratuit),
+      // la zone et la devise de facturation basculent aussi ; sinon elles changent au prochain changement de plan.
+      const zone = zoneForCurrency(to);
+      await tx.subscription.updateMany({
+        where: { storeId, zone: { not: zone }, OR: [{ status: "TRIALING" }, { planId: "FREE" }] },
+        data: { zone, currency: ZONE_CURRENCY[zone] },
+      });
       await audit({ storeId, actorId: ctx.user.id, action: "store.currency_changed", metadata: { from, to, disabledGateways: off.length } }, tx);
       return off.length;
     });
