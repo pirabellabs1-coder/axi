@@ -101,6 +101,22 @@ async function fetchPhoneNumber(phoneNumberId: string, token: string, fetchImpl:
   return { displayPhoneNumber: data.display_phone_number ?? null, verifiedName: data.verified_name ?? null };
 }
 
+/**
+ * Si Meta n'a renvoyé que le compte (WABA) sans le numéro, retrouve le numéro de ce compte. Exige qu'il y en ait
+ * exactement un (sinon on ne peut pas deviner lequel connecter).
+ */
+async function resolvePhoneNumberId(wabaId: string, token: string, fetchImpl: typeof fetch): Promise<string> {
+  const data = await graph<{ data?: { id?: string }[] }>(
+    fetchImpl,
+    `https://graph.facebook.com/${GRAPH_VERSION}/${wabaId}/phone_numbers?fields=id`,
+    { method: "GET", headers: { Authorization: `Bearer ${token}` } },
+  );
+  const ids = (data.data ?? []).map((p) => p.id).filter((id): id is string => typeof id === "string" && /^\d{5,32}$/.test(id));
+  if (ids.length === 0) throw new EmbeddedSignupError("Aucun numéro n'est rattaché à ce compte WhatsApp Business : ajoutez et vérifiez un numéro dans la fenêtre Meta, puis réessayez.");
+  if (ids.length > 1) throw new EmbeddedSignupError("Ce compte WhatsApp Business contient plusieurs numéros : relancez la connexion et sélectionnez le numéro à connecter.");
+  return ids[0];
+}
+
 /** Abonne l'app Axi à la WABA du marchand : ses événements arrivent sur le webhook partagé. */
 async function subscribeAppToWaba(wabaId: string, token: string, fetchImpl: typeof fetch): Promise<void> {
   await graph(fetchImpl, `https://graph.facebook.com/${GRAPH_VERSION}/${wabaId}/subscribed_apps`, {
@@ -138,17 +154,19 @@ export type EmbeddedSignupResult = {
  * `fetchImpl` est injectable pour les tests. Lève EmbeddedSignupError (affichable) à la moindre étape ratée.
  */
 export async function runEmbeddedSignup(
-  input: { code: string; phoneNumberId: string; wabaId: string },
+  input: { code: string; phoneNumberId?: string | null; wabaId: string },
   fetchImpl: typeof fetch = fetch,
 ): Promise<EmbeddedSignupResult> {
   if (!partnerModeConfig()) throw new EmbeddedSignupError("Mode partenaire non configuré.");
   const code = input.code.trim();
-  const { phoneNumberId, wabaId } = input;
+  const { wabaId } = input;
+  const givenPhone = input.phoneNumberId?.trim() || null;
   if (!code) throw new EmbeddedSignupError("Code d'autorisation manquant.");
-  if (!/^\d{5,32}$/.test(phoneNumberId)) throw new EmbeddedSignupError("Identifiant de numéro invalide.");
+  if (givenPhone && !/^\d{5,32}$/.test(givenPhone)) throw new EmbeddedSignupError("Identifiant de numéro invalide.");
   if (!/^\d{5,32}$/.test(wabaId)) throw new EmbeddedSignupError("Identifiant WABA invalide.");
 
   const token = await exchangeCodeForToken(code, fetchImpl);
+  const phoneNumberId = givenPhone ?? (await resolvePhoneNumberId(wabaId, token, fetchImpl));
   const phone = await fetchPhoneNumber(phoneNumberId, token, fetchImpl);
   await subscribeAppToWaba(wabaId, token, fetchImpl);
   const pin = numericCode(6);

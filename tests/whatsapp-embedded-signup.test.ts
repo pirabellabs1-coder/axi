@@ -137,3 +137,20 @@ describe("runEmbeddedSignup", () => {
     await expect(runEmbeddedSignup({ code: "c", phoneNumberId: PHONE, wabaId: WABA }, mockFetch(okHandlers()))).rejects.toThrow(/non configuré/);
   });
 });
+
+describe("runEmbeddedSignup — numéro non renvoyé par la fenêtre Meta", () => {
+  const listHandler = (ids: string[]): Handler => ({ match: (u) => u.includes(`/${WABA}/phone_numbers`), body: { data: ids.map((id) => ({ id })) } });
+
+  it("retrouve l'unique numéro du compte WABA", async () => {
+    const res = await runEmbeddedSignup({ code: "c", phoneNumberId: "", wabaId: WABA }, mockFetch([listHandler([PHONE]), ...okHandlers()]));
+    expect(res.phoneNumberId).toBe(PHONE);
+  });
+
+  it("échoue clairement si le compte n'a aucun numéro", async () => {
+    await expect(runEmbeddedSignup({ code: "c", wabaId: WABA }, mockFetch([listHandler([]), ...okHandlers()]))).rejects.toThrow(/Aucun numéro/);
+  });
+
+  it("échoue clairement si le compte a plusieurs numéros", async () => {
+    await expect(runEmbeddedSignup({ code: "c", phoneNumberId: null, wabaId: WABA }, mockFetch([listHandler([PHONE, "555666777"]), ...okHandlers()]))).rejects.toThrow(/plusieurs numéros/);
+  });
+});

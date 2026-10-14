@@ -64,7 +64,7 @@ export async function saveWhatsappCloud(_prev: ActionResult | undefined, formDat
 
     const phoneNumberId = parsed.data.phoneNumberId;
     // M2 : un numéro Meta n'appartient qu'à une boutique (colonne unique Integration.phoneNumberId).
-    const taken = await db.integration.findUnique({ where: { phoneNumberId }, select: { storeId: true } });
+    const taken = phoneNumberId ? await db.integration.findUnique({ where: { phoneNumberId }, select: { storeId: true } }) : null;
     if (taken && taken.storeId !== ctx.store.id) {
       return fail("Ce numéro WhatsApp est déjà connecté à une autre boutique Axi. Contactez le support si vous en êtes le titulaire.", { phoneNumberId: ["Déjà utilisé"] });
     }
@@ -95,7 +95,8 @@ export async function saveWhatsappCloud(_prev: ActionResult | undefined, formDat
 const esignupSchema = z.object({
   storeId: z.string(),
   code: z.string().trim().min(1, "Code d'autorisation manquant").max(4096),
-  phoneNumberId: z.string().trim().regex(/^\d{5,32}$/, "Identifiant du numéro invalide"),
+  // Facultatif : si la fenêtre Meta ne l'a pas renvoyé, le serveur retrouve le numéro du compte (WABA).
+  phoneNumberId: z.union([z.literal(""), z.string().trim().regex(/^\d{5,32}$/, "Identifiant du numéro invalide")]).optional(),
   wabaId: z.string().trim().regex(/^\d{5,32}$/, "Identifiant WABA invalide"),
 });
 
@@ -105,7 +106,7 @@ const esignupSchema = z.object({
  * jeton chiffré dans la même Integration `whatsapp_cloud` que la saisie manuelle. Le numéro étant vérifié et
  * abonné dans le flux, l'intégration passe directement « active ».
  */
-export async function finishEmbeddedSignup(input: { storeId: string; code: string; phoneNumberId: string; wabaId: string }): Promise<ActionResult> {
+export async function finishEmbeddedSignup(input: { storeId: string; code: string; phoneNumberId?: string; wabaId: string }): Promise<ActionResult> {
   return guard(async () => {
     const parsed = esignupSchema.safeParse(input);
     if (!parsed.success) return fail(z.flattenError(parsed.error).formErrors[0] ?? "Données de connexion invalides.");
