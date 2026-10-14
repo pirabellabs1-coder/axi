@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { MessageCircle, MousePointerClick, ShoppingBag, Cloud, Phone, PackagePlus, ArrowUpRight } from "lucide-react";
+import { MessageCircle, MousePointerClick, ShoppingBag, Cloud, Phone, PackagePlus, ArrowUpRight, FileText } from "lucide-react";
 import { getStoreContext } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { PLANS } from "@/config/plans";
@@ -119,7 +119,14 @@ export default async function WhatsappPage({ params }: { params: Promise<{ store
               <Badge tone="sun">Plan Business</Badge>
             )}
           </div>
-          <p className="text-sm text-ink-muted">Meta Cloud API, depuis votre propre numéro WhatsApp Business.</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-sm text-ink-muted">Meta Cloud API, depuis votre propre numéro WhatsApp Business.</p>
+            {hasApi && (
+              <ButtonLink href={`/app/${store.id}/whatsapp/modeles`} variant="outline" size="sm">
+                <FileText className="size-4" aria-hidden /> Modèles de messages
+              </ButtonLink>
+            )}
+          </div>
         </div>
 
         {!hasApi ? (

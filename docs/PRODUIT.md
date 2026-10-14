@@ -104,6 +104,7 @@ Méthodes disponibles dès P0, activables par boutique :
 
 - P0 : bouton « Commander sur WhatsApp » → panier enregistré côté serveur → message `wa.me` prérempli avec référence et récapitulatif. Le clic est journalisé comme *tentative*, jamais comme envoi.
 - P1 : intégration API officielle (Meta Cloud API) : structure `Integration` + webhooks signés + modèles ; l'activation réelle nécessite un numéro et un compte Meta Business (porteur).
+- P1 ter — **modèles de messages** : écran de gestion des modèles WhatsApp (liste + statut d'approbation Meta, création, suppression) et santé du numéro (nom vérifié, note de qualité), en direct via l'API Graph, sans stockage côté Axi (`src/lib/whatsapp/templates.ts`). L'envoi effectif par modèle reste à câbler dans le worker.
 - P1 bis — **mode partenaire (Embedded Signup)** : Axi comme fournisseur de technologies Meta. Le marchand connecte son numéro en quelques clics (*WhatsApp › Connexion partenaire*), sans recopier d'identifiant : Axi échange le code OAuth, s'abonne à la WABA et enregistre le numéro au nom du client (`src/lib/whatsapp/embedded-signup.ts`). La saisie manuelle des identifiants reste disponible (avancé). Branché par variables d'environnement ; prérequis Meta (vérification d'entreprise, revue « fournisseur de technologies », ligne de crédit partagée) côté porteur. Détail : `docs/DEPLOIEMENT.md` §7.3 ter.
 
 ## 7. Périmètre livré dans ce dépôt

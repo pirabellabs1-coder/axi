@@ -426,6 +426,10 @@ Axi comme **fournisseur de technologies** Meta : le marchand connecte SON numér
 - **Prérequis côté Meta (porteur, hors code)** : vérification de l'entreprise ; « Devenir fournisseur de technologies » (revue complète de l'application) ; une configuration Embedded Signup (rubrique *Gestion des clients* de l'app) dont l'ID alimente `NEXT_PUBLIC_META_ESIGNUP_CONFIG_ID` ; **ligne de crédit / paiement partagé** configurée dans Meta Business Settings pour facturer au nom des clients. L'app Meta et son secret sont les mêmes que pour le webhook (§7.3).
 - **Non testé contre Meta** (pas de compte) : les appels Graph (`oauth/access_token`, lecture du numéro, `subscribed_apps`, `register`) sont couverts par `tests/whatsapp-embedded-signup.test.ts` avec un `fetch` simulé ; à valider de bout en bout avec l'application Meta réelle et un numéro de test. Le code tolère un numéro déjà enregistré ; les messages d'erreur ne divulguent jamais le secret d'application ni le jeton.
 
+### 7.3 quater Modèles de messages et santé du numéro **[INTÉGRATION]**
+
+- Écran *WhatsApp › Modèles de messages* (`src/app/app/[storeId]/whatsapp/modeles/`) : liste les modèles de la WABA et leur statut (Approuvé / En validation / Rejeté), permet d'en **créer** (soumission à validation) et d'en **supprimer**, et affiche la **santé du numéro** (nom vérifié, note de qualité, numéro affiché). Les modèles ne sont pas stockés côté Axi : lecture/écriture directes via Graph (`src/lib/whatsapp/templates.ts`, endpoint `message_templates`), jeton + `wabaId` lus sur l'intégration `whatsapp_cloud` active. Dégradation propre si Meta échoue (jeton expiré, réseau). Couvert par `tests/whatsapp-templates.test.ts` (`fetch` simulé) ; non testé contre Meta. L'**envoi** par modèle (hors fenêtre 24 h) reste à câbler dans le worker `notification.send`.
+
 ### 7.4 Rapprochement et exploitation
 
 - `reconcilePendingAttempts()` est appelé par `/api/jobs/run` et par le bouton admin : il interroge `fetchStatus` pour les tentatives `INITIATED` de plus de 10 minutes.
