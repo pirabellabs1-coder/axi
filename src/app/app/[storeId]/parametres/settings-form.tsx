@@ -1,5 +1,6 @@
 "use client";
 
+import { minorToInput, moneyStep } from "@/lib/money";
 import { useActionState, useState } from "react";
 import { updateStoreSettings } from "@/lib/store/actions";
 import { STORE_CATEGORIES } from "@/config/site";
@@ -94,7 +95,7 @@ export function SettingsForm({ storeId, data, currency, dialCode }: { storeId: s
           </div>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <Field id="minOrderAmount" label={`Minimum de commande (${currency})`} error={fieldError(state, "minOrderAmount")} hint="0 = pas de minimum.">
-              {(p) => <Input {...p} name="minOrderAmount" type="number" inputMode="numeric" min={0} defaultValue={data.minOrderAmount} />}
+              {(p) => <Input {...p} name="minOrderAmount" type="number" inputMode={moneyStep(currency) === "1" ? "numeric" : "decimal"} min={0} step={moneyStep(currency)} defaultValue={minorToInput(data.minOrderAmount, currency)} />}
             </Field>
             <Field id="orderNotes" label="Note affichée au checkout" error={fieldError(state, "orderNotes")} hint="Ex. « Commandes avant 16 h livrées le jour même »">
               {(p) => <Input {...p} name="orderNotes" defaultValue={data.orderNotes} maxLength={200} />}

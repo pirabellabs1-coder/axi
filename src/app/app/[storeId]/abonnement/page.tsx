@@ -51,7 +51,11 @@ export default async function SubscriptionPage({ params }: { params: Promise<{ s
     db.automation.count({ where: { storeId: store.id, active: true } }),
     sub ? pendingPlanChange(sub.id) : Promise.resolve(null),
   ]);
-  const [addonIds, notDebt] = await Promise.all([addOnInvoiceIds(invoicesRaw.map((i) => i.id)), nonDebtInvoiceIds(invoicesRaw.map((i) => i.id))]);
+  const [addonIds, notDebt, domainIds] = await Promise.all([
+    addOnInvoiceIds(invoicesRaw.map((i) => i.id)),
+    nonDebtInvoiceIds(invoicesRaw.map((i) => i.id)),
+    db.domainCharge.findMany({ where: { storeId: store.id, invoiceId: { in: invoicesRaw.map((i) => i.id) } }, select: { invoiceId: true } }).then((r) => new Set(r.map((x) => x.invoiceId))),
+  ]);
   const invoices = invoicesRaw.filter((i) => i.status !== "VOID" || i.paidAt);
 
   const combos = PLAN_ORDER.flatMap((p) => (["MONTHLY", "YEARLY"] as Interval[]).map((i) => [p, i] as const));
@@ -239,7 +243,7 @@ export default async function SubscriptionPage({ params }: { params: Promise<{ s
                       {i.number}
                     </Link>
                   </TD>
-                  <TD>{addonIds.has(i.id) ? "Option" : `Plan ${PLANS[i.planId as PlanId].name}`}</TD>
+                  <TD>{domainIds.has(i.id) ? "Nom de domaine" : addonIds.has(i.id) ? "Option" : `Plan ${PLANS[i.planId as PlanId].name}`}</TD>
                   <TD className="whitespace-nowrap text-ink-muted">
                     {i.periodEnd.getTime() - i.periodStart.getTime() < DAY ? formatDate(i.periodStart) : `${formatDate(i.periodStart)} au ${formatDate(i.periodEnd)}`}
                   </TD>

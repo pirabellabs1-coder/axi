@@ -42,6 +42,7 @@ export default async function EditProductPage({ params }: { params: Promise<{ st
   const initial = productToFormValues(
     product,
     member.filter((m) => !autoIds.has(m.id)).map((m) => m.id),
+    ctx.store.currency,
   );
   const base = `/app/${ctx.store.id}`;
   const st = STATUS[product.status];

@@ -11,6 +11,8 @@ import { PlanGate } from "@/components/app/plan-gate";
 import { SettingsForm } from "./settings-form";
 import { DangerZone } from "./danger-zone";
 import { TrackingForm } from "./tracking-form";
+import { CurrencyForm } from "./currency-form";
+import { db } from "@/lib/db";
 
 export const metadata: Metadata = { title: "Paramètres" };
 
@@ -23,6 +25,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ store
   const canTrack = PLANS[ctx.planId].features.pixels;
   const hasTracking = !!(s.metaPixelId || s.gaMeasurementId);
   const base = `/app/${s.id}`;
+  const [orderCount, giftCardCount] = await Promise.all([db.order.count({ where: { storeId: s.id } }), db.giftCard.count({ where: { storeId: s.id } })]);
   // Réglages détaillés (vague 2) : chaque écran revérifie lui-même la capacité ; on ne montre que les liens utilisables.
   const shortcuts: { href: string; title: string; description: string; icon: LucideIcon; show: boolean }[] = [
     { href: `${base}/parametres/comptes-clients`, title: "Comptes clients", description: "Connexion par code WhatsApp : historique, adresses, favoris, points et avoir.", icon: UserRound, show: true },
@@ -102,15 +105,15 @@ export default async function SettingsPage({ params }: { params: Promise<{ store
         </Card>
 
         <Card as="section" aria-labelledby="locale-title">
-          <CardHeader title={<span id="locale-title" className="inline-flex items-center gap-2"><Globe2 className="size-4 text-primary" aria-hidden /> Langue, devise et fuseau horaire</span>} description="Définis par le pays choisi à la création. Ils garantissent la cohérence des prix, des horaires et des factures." />
+          <CardHeader title={<span id="locale-title" className="inline-flex items-center gap-2"><Globe2 className="size-4 text-primary" aria-hidden /> Langue, devise et fuseau horaire</span>} description="Le pays et le fuseau sont fixés à la création ; la devise est modifiable tant que la boutique n'a pas de commande." />
           <CardBody>
-            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <CurrencyForm storeId={s.id} currency={s.currency} locked={orderCount + giftCardCount > 0} />
+            <dl className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
               <div><dt className="text-[13px] text-ink-muted">Pays</dt><dd className="mt-1 font-medium text-ink">{country.name}</dd></div>
-              <div><dt className="text-[13px] text-ink-muted">Devise</dt><dd className="mt-1 font-medium text-ink">{s.currency}</dd></div>
               <div><dt className="text-[13px] text-ink-muted">Fuseau</dt><dd className="mt-1 font-medium text-ink">{s.timezone}</dd></div>
               <div><dt className="text-[13px] text-ink-muted">Langue</dt><dd className="mt-1 font-medium text-ink">Français</dd></div>
             </dl>
-            <p className="mt-4 text-sm text-ink-muted">Changer de pays ou de devise après des ventes fausserait l'historique : contactez le support si nécessaire.</p>
+            <p className="mt-4 text-sm text-ink-muted">Changer de pays fausserait l'historique (taxes, fuseau, factures) : contactez le support si nécessaire.</p>
           </CardBody>
         </Card>
 

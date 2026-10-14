@@ -34,6 +34,7 @@ export default async function InvoicePage({
   if (!inv) notFound();
   const [lines, addonIds, isChange] = await Promise.all([invoiceLines(inv), addOnInvoiceIds([inv.id]), isPlanChangeInvoice(inv.id)]);
   const isAddOn = addonIds.has(inv.id);
+  const isDomain = !!(await db.domainCharge.findUnique({ where: { invoiceId: inv.id }, select: { id: true } }));
   const zone = zoneForCurrency(inv.currency);
   const provider = platformProviderFor(zone);
   const online = provider !== "manual" && providerReady(provider);
@@ -66,7 +67,7 @@ export default async function InvoicePage({
           )}
           {inv.status === "PAID" && (
             <Alert tone="success" title="Facture réglée">
-              Merci. Paiement reçu le {inv.paidAt ? formatDate(inv.paidAt) : ""}. {isAddOn ? "Votre option est active." : "Votre abonnement est actif."}
+              Merci. Paiement reçu le {inv.paidAt ? formatDate(inv.paidAt) : ""}. {isDomain ? "L'opération sur votre nom de domaine est lancée : suivez-la depuis la page Domaine." : isAddOn ? "Votre option est active." : "Votre abonnement est actif."}
             </Alert>
           )}
         </div>

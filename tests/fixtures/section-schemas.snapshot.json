@@ -77,7 +77,7 @@
               "type": "text",
               "id": "text",
               "label": "Texte",
-              "default": "Livraison offerte dès 20 000 FCFA",
+              "default": "Bienvenue dans notre boutique",
               "maxLength": 120
             },
             {

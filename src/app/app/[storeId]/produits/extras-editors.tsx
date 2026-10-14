@@ -5,6 +5,7 @@ import type { DetailInput, OptionGroupInput } from "@/lib/products/schemas";
 import { Field, Input, Textarea, Checkbox } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { MoneyCell } from "./variants-editor";
 
 const iconBtn =
   "inline-flex size-11 items-center justify-center rounded-full text-ink-muted transition-[background-color,color,transform] hover:bg-surface-2 hover:text-ink active:scale-[0.96] disabled:opacity-30 disabled:hover:bg-transparent sm:size-9";
@@ -45,11 +46,12 @@ export function SupplementsEditor({ groups, onChange, currency, error }: { group
             {g.options.map((o, oi) => (
               <li key={oi} className="grid grid-cols-[1fr_120px_auto] items-center gap-2 sm:grid-cols-[1fr_160px_auto]">
                 <Input aria-label="Nom du choix" value={o.name} onChange={(e) => set(gi, { options: g.options.map((y, k) => (k === oi ? { ...y, name: e.target.value } : y)) })} placeholder="Papier cadeau" maxLength={60} className="h-11 px-3 text-sm" />
-                <Input
-                  aria-label="Supplément de prix"
-                  inputMode="numeric"
-                  value={o.priceDelta === 0 ? "" : o.priceDelta}
-                  onChange={(e) => set(gi, { options: g.options.map((y, k) => (k === oi ? { ...y, priceDelta: Number(e.target.value.replace(/[^\d-]/g, "")) || 0 } : y)) })}
+                <MoneyCell
+                  label="Supplément de prix"
+                  allowNegative
+                  value={o.priceDelta === 0 ? null : o.priceDelta}
+                  currency={currency}
+                  onChange={(v) => set(gi, { options: g.options.map((y, k) => (k === oi ? { ...y, priceDelta: v ?? 0 } : y)) })}
                   placeholder={`+ 0 ${currency}`}
                   className="h-11 px-3 text-sm"
                 />

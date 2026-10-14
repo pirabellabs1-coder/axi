@@ -293,7 +293,7 @@ export async function createPosSale(input: CreatePosSaleInput): Promise<PosSaleR
 
     /* 4. Prix retenu (exception hors ligne contrôlée) et paiements. */
     const decision = decidePrice({ serverTotal, collectedTotal: input.collectedTotal, offline });
-    const payment = checkPayments(decision.total, input.payments);
+    const payment = checkPayments(decision.total, input.payments, store.currency);
     if (!payment.ok) throw new PosError(payment.error);
 
     /* 5. Client facultatif (téléphone) : fiche par boutique, jamais écrasée. */

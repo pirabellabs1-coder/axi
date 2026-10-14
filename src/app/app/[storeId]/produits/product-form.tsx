@@ -12,7 +12,7 @@ import { SERVER_MAX_IMAGES, type DetailInput, type ImageInput, type OptionGroupI
 import { MAX_VARIANTS, buildVariantMatrix, countCombinations, variantName, type ProductOption, type VariantDraft } from "@/lib/products/variants";
 import { markdownToText } from "@/lib/products/markdown";
 import { cn, slugify } from "@/lib/utils";
-import { formatMoney } from "@/lib/money";
+import { currencyDecimals, formatMoney, parseMoneyInput, sanitizeMoneyInput } from "@/lib/money";
 import { Field, Input, Select, Switch, Label, Hint, Textarea, Checkbox } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardBody } from "@/components/ui/card";
@@ -241,9 +241,12 @@ export function ProductForm({
     });
 
   /* ── Calculs d'aperçu ── */
-  const price = int(v.price) ?? 0;
-  const cost = int(v.costPrice);
-  const promo = int(v.promoPrice);
+  // Prix saisis en unités majeures (« 12.50 » €) ; convertis en unités mineures (centimes) pour le calcul et l'envoi.
+  const money = (x: string): number | null => (x.trim() === "" ? null : parseMoneyInput(x, currency));
+  const moneyMode = currencyDecimals(currency) === 0 ? "numeric" : "decimal";
+  const price = money(v.price) ?? 0;
+  const cost = money(v.costPrice);
+  const promo = money(v.promoPrice);
   const margin = cost != null && price > 0 ? { amount: price - cost, pct: Math.round(((price - cost) / price) * 100) } : null;
   const discount = promo != null && price > 0 && promo < price ? Math.round(100 - (promo / price) * 100) : null;
   const hasVariants = v.variants.length > 0;
@@ -288,10 +291,10 @@ export function ProductForm({
     tags: v.tags,
     seoTitle: v.seoTitle || null,
     seoDescription: v.seoDescription || null,
-    price: int(v.price) ?? -1,
-    compareAtPrice: int(v.compareAtPrice),
-    costPrice: int(v.costPrice),
-    promoPrice: int(v.promoPrice),
+    price: money(v.price) ?? -1,
+    compareAtPrice: money(v.compareAtPrice),
+    costPrice: money(v.costPrice),
+    promoPrice: money(v.promoPrice),
     promoStart: v.promoPrice && v.promoStart ? new Date(v.promoStart).toISOString() : null,
     promoEnd: v.promoPrice && v.promoEnd ? new Date(v.promoEnd).toISOString() : null,
     sku: v.sku || null,
@@ -328,7 +331,7 @@ export function ProductForm({
       document.getElementById("name")?.focus();
       return;
     }
-    if (int(v.price) == null) {
+    if (money(v.price) == null) {
       setErrors({ price: ["Indiquez un prix"] });
       document.getElementById("price")?.focus();
       return;
@@ -442,16 +445,16 @@ export function ProductForm({
             </Card>
 
             <Card>
-              <CardHeader title="Prix" description={`Montants entiers en ${currency}.`} />
+              <CardHeader title="Prix" description={currencyDecimals(currency) === 0 ? `Montants en ${currency}, sans décimales.` : `Montants en ${currency}, centimes possibles (ex. 12,50).`} />
               <CardBody className="grid gap-4 sm:grid-cols-2">
                 <Field id="price" label="Prix" required error={err("price")}>
-                  {(p) => <Input {...p} inputMode="numeric" value={v.price} onChange={(e) => set({ price: digits(e.target.value) })} placeholder="15000" />}
+                  {(p) => <Input {...p} inputMode={moneyMode} value={v.price} onChange={(e) => set({ price: sanitizeMoneyInput(e.target.value, currency) })} placeholder={currencyDecimals(currency) === 0 ? "15000" : "19.90"} />}
                 </Field>
                 <Field id="compareAtPrice" label="Prix barré" hint="Prix avant remise, affiché barré. Doit être supérieur au prix." error={err("compareAtPrice")}>
-                  {(p) => <Input {...p} inputMode="numeric" value={v.compareAtPrice} onChange={(e) => set({ compareAtPrice: digits(e.target.value) })} />}
+                  {(p) => <Input {...p} inputMode={moneyMode} value={v.compareAtPrice} onChange={(e) => set({ compareAtPrice: sanitizeMoneyInput(e.target.value, currency) })} />}
                 </Field>
                 <Field id="costPrice" label="Coût par article" hint="Jamais affiché aux clients." error={err("costPrice")}>
-                  {(p) => <Input {...p} inputMode="numeric" value={v.costPrice} onChange={(e) => set({ costPrice: digits(e.target.value) })} />}
+                  {(p) => <Input {...p} inputMode={moneyMode} value={v.costPrice} onChange={(e) => set({ costPrice: sanitizeMoneyInput(e.target.value, currency) })} />}
                 </Field>
                 <div className="grid grid-cols-2 gap-3 rounded-[var(--radius-md)] bg-surface-2/50 px-4 py-3 ring-1 ring-inset ring-line">
                   <div>
@@ -465,7 +468,7 @@ export function ProductForm({
                 </div>
                 <div className="sm:col-span-2">
                   <Field id="promoPrice" label="Prix promotionnel" error={err("promoPrice")} hint={discount != null ? `Remise de ${discount} %. Laissez les dates vides pour une promotion sans limite.` : "Optionnel. Inférieur au prix ; datez la promotion si besoin."}>
-                    {(p) => <Input {...p} inputMode="numeric" value={v.promoPrice} onChange={(e) => set({ promoPrice: digits(e.target.value) })} className="sm:max-w-60" />}
+                    {(p) => <Input {...p} inputMode={moneyMode} value={v.promoPrice} onChange={(e) => set({ promoPrice: sanitizeMoneyInput(e.target.value, currency) })} className="sm:max-w-60" />}
                   </Field>
                 </div>
                 {v.promoPrice && (

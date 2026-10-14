@@ -5,7 +5,7 @@ import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireStore, type StoreContext } from "@/lib/auth/permissions";
-import { guard, parseForm, fail, success, zBool, zOptionalString, zMoney, type ActionResult } from "@/lib/action";
+import { guard, parseForm, fail, success, zBool, zOptionalString, zMoneyText, readMoneyFields, type ActionResult } from "@/lib/action";
 import { PLANS } from "@/config/plans";
 import { audit } from "@/lib/audit";
 
@@ -28,8 +28,8 @@ const couponSchema = z.object({
     .toUpperCase()
     .regex(/^[A-Z0-9_-]{3,24}$/, "3 à 24 caractères : lettres, chiffres, tirets"),
   type: z.enum(["PERCENT", "FIXED", "FREE_DELIVERY"]),
-  value: zMoney.default(0),
-  minSubtotal: zMoney.default(0),
+  value: zMoneyText, // FIXED : unités majeures de la devise ; PERCENT : pourcentage entier
+  minSubtotal: zMoneyText,
   maxUses: zOptInt,
   maxUsesPerCustomer: zOptInt,
   startsAt: zOptDate,
@@ -46,10 +46,24 @@ export async function upsertCoupon(_prev: ActionResult | undefined, formData: Fo
   return guard(async () => {
     const parsed = parseForm(couponSchema, formData);
     if ("error" in parsed) return parsed.error;
-    const d = parsed.data;
-    const ctx = await requireStore(d.storeId, "coupons.manage");
+    const { value: rawValue, minSubtotal: rawMin, ...rest } = parsed.data;
+    const ctx = await requireStore(rest.storeId, "coupons.manage");
     const gate = requireCoupons(ctx);
     if (gate) return gate;
+    // Pourcentage : entier saisi tel quel ; montant fixe et seuil : unités majeures → unités mineures.
+    let value = 0;
+    if (rest.type === "PERCENT") {
+      const pct = rawValue.trim() === "" ? 0 : Number(rawValue.trim());
+      if (!Number.isInteger(pct)) return fail("Le pourcentage doit être un nombre entier.", { value: ["Nombre entier"] });
+      value = pct;
+    } else if (rest.type === "FIXED") {
+      const v = readMoneyFields({ value: rawValue }, { value: 0 }, ctx.store.currency);
+      if ("error" in v) return v.error;
+      value = v.values.value ?? 0;
+    }
+    const mm = readMoneyFields({ minSubtotal: rawMin }, { minSubtotal: 0 }, ctx.store.currency);
+    if ("error" in mm) return mm.error;
+    const d = { ...rest, value, minSubtotal: mm.values.minSubtotal ?? 0 };
 
     if (d.type === "PERCENT" && (d.value < 1 || d.value > 100)) return fail("Le pourcentage doit être entre 1 et 100.", { value: ["Entre 1 et 100"] });
     if (d.type === "FIXED" && d.value < 1) return fail("Indiquez un montant de remise.", { value: ["Montant requis"] });

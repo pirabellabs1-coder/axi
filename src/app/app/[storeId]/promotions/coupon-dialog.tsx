@@ -1,5 +1,6 @@
 "use client";
 
+import { minorToInput, moneyStep } from "@/lib/money";
 import { useActionState, useState } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { upsertCoupon, toggleCoupon, deleteCoupon } from "@/lib/coupons/actions";
@@ -91,12 +92,12 @@ export function CouponDialog({ storeId, coupon, currency, trigger, options }: { 
             </Field>
             {type !== "FREE_DELIVERY" && (
               <Field id="value" label={type === "PERCENT" ? "Pourcentage (%)" : `Montant (${currency})`} required error={fieldError(state, "value")}>
-                {(p) => <Input {...p} name="value" type="number" inputMode="numeric" min={type === "PERCENT" ? 1 : 0} max={type === "PERCENT" ? 100 : undefined} defaultValue={coupon?.value || ""} />}
+                {(p) => <Input {...p} key={type} name="value" type="number" inputMode={type === "PERCENT" || moneyStep(currency) === "1" ? "numeric" : "decimal"} min={type === "PERCENT" ? 1 : 0} max={type === "PERCENT" ? 100 : undefined} step={type === "PERCENT" ? "1" : moneyStep(currency)} defaultValue={!coupon?.value || coupon.type !== type ? "" : type === "PERCENT" ? coupon.value : minorToInput(coupon.value, currency)} />}
               </Field>
             )}
           </div>
           <Field id="minSubtotal" label={`Minimum de commande (${currency})`} error={fieldError(state, "minSubtotal")} hint="0 = pas de minimum.">
-            {(p) => <Input {...p} name="minSubtotal" type="number" inputMode="numeric" min={0} defaultValue={coupon?.minSubtotal ?? 0} />}
+            {(p) => <Input {...p} name="minSubtotal" type="number" inputMode={moneyStep(currency) === "1" ? "numeric" : "decimal"} min={0} step={moneyStep(currency)} defaultValue={minorToInput(coupon?.minSubtotal ?? 0, currency)} />}
           </Field>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field id="maxUses" label="Limite d'utilisations (total)" error={fieldError(state, "maxUses")} hint="Vide = illimité.">

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireStore } from "@/lib/auth/permissions";
-import { guard, parseForm, fail, success, zBool, zOptionalString, zMoney, type ActionResult } from "@/lib/action";
+import { guard, parseForm, fail, success, zBool, zOptionalString, zMoneyText, readMoneyFields, type ActionResult } from "@/lib/action";
 import { PLANS } from "@/config/plans";
 import { audit } from "@/lib/audit";
 import { MAX_ZONES_HARD, zoneLimit, zoneLimitMessage } from "./limits";
@@ -29,14 +29,12 @@ export async function setFulfillmentOption(storeId: string, key: "pickupEnabled"
 
 // ─────────────── Zones de livraison ───────────────
 
-const zOptMoney = z.preprocess((v) => (v === "" || v == null ? undefined : v), zMoney.optional());
-
 const zoneSchema = z.object({
   storeId: z.string(),
   id: zOptionalString,
   name: z.string().trim().min(2, "Nom de zone requis").max(80),
-  fee: zMoney,
-  freeAbove: zOptMoney,
+  fee: zMoneyText,
+  freeAbove: zMoneyText,
   etaLabel: zOptionalString,
   active: zBool,
 });
@@ -47,7 +45,10 @@ export async function upsertDeliveryZone(_prev: ActionResult | undefined, formDa
     if ("error" in parsed) return parsed.error;
     const d = parsed.data;
     const ctx = await requireStore(d.storeId, "delivery.manage");
-    const data = { name: d.name, fee: d.fee, freeAbove: d.freeAbove ?? null, etaLabel: d.etaLabel ?? null, active: d.active };
+    const m = readMoneyFields({ fee: d.fee, freeAbove: d.freeAbove }, { fee: 0, freeAbove: null }, ctx.store.currency);
+    if ("error" in m) return m.error;
+    const fee = m.values.fee ?? 0;
+    const data = { name: d.name, fee, freeAbove: m.values.freeAbove, etaLabel: d.etaLabel ?? null, active: d.active };
     if (d.id) {
       const r = await db.deliveryZone.updateMany({ where: { id: d.id, storeId: ctx.store.id }, data });
       if (r.count === 0) return fail("Zone introuvable.");
@@ -58,7 +59,7 @@ export async function upsertDeliveryZone(_prev: ActionResult | undefined, formDa
       if (limit != null && count >= limit) return fail(zoneLimitMessage(ctx.planId, count));
       if (count >= MAX_ZONES_HARD) return fail(`Maximum ${MAX_ZONES_HARD} zones par boutique.`);
       const z = await db.deliveryZone.create({ data: { ...data, storeId: ctx.store.id, position: count } });
-      await audit({ storeId: ctx.store.id, actorId: ctx.user.id, action: "delivery_zone.created", target: z.id, metadata: { name: d.name, fee: d.fee } });
+      await audit({ storeId: ctx.store.id, actorId: ctx.user.id, action: "delivery_zone.created", target: z.id, metadata: { name: d.name, fee } });
     }
     revalidate(ctx.store.id, ctx.store.slug);
     return success(undefined, d.id ? "Zone mise à jour" : "Zone ajoutée");

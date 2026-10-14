@@ -28,8 +28,10 @@ export async function purchaseAddOn(storeId: string, addOnId: string, quantity =
     const ctx = await requireStore(storeId, "billing.manage");
     const addOn = getAddOn(parsed.data.addOnId);
     if (!addOn) return fail("Option inconnue.");
+    // Option retirée : l'achat de domaine se fait désormais depuis Domaine (recherche, prix réel, renouvellement).
+    if (addOn.id === "DOMAIN_NAME") return fail("L'achat de nom de domaine se fait maintenant depuis la page Domaine de votre boutique.");
     if (!addOn.plans.includes(ctx.planId)) return fail(`Cette option n'est pas disponible avec votre plan actuel.`);
-    const qty = addOn.billing === "ONE_TIME" || addOn.id === "DOMAIN_NAME" || addOn.id === "SECTOR_TEMPLATE" ? 1 : parsed.data.quantity;
+    const qty = addOn.billing === "ONE_TIME" || addOn.id === "SECTOR_TEMPLATE" ? 1 : parsed.data.quantity;
 
     // Évite les doublons : une facture d'option en attente identique est réutilisée.
     const pending = await db.addOnPurchase.findFirst({ where: { storeId: ctx.store.id, addOnId: addOn.id, status: "PENDING", startsAt: { lte: new Date(Date.now() + 60_000) } }, orderBy: { createdAt: "desc" } });

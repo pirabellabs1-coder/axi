@@ -57,7 +57,11 @@ export type LazyJobType =
   | "inventory.reconcile"
   | "shipment.poll"
   | "shipment.status_changed"
-  | "pos.session_report";
+  | "pos.session_report"
+  // Domaines achetés via Axi (src/lib/domains/jobs.ts) : achat / renouvellement après facture payée, suivi d'opération
+  | "domain.register"
+  | "domain.renew"
+  | "domain.poll";
 
 export async function enqueue(type: JobType, payload: Record<string, unknown>, opts: { storeId?: string | null; runAt?: Date } = {}, tx: Tx | typeof db = db) {
   return tx.job.create({
@@ -95,6 +99,9 @@ const LAZY_JOB_MODULES: Record<LazyJobType, () => Promise<{ handlers: JobHandler
   "shipment.poll": () => import("@/lib/shipping/jobs"),
   "shipment.status_changed": () => import("@/lib/shipping/jobs"),
   "pos.session_report": () => import("@/lib/pos/jobs"),
+  "domain.register": () => import("@/lib/domains/jobs"),
+  "domain.renew": () => import("@/lib/domains/jobs"),
+  "domain.poll": () => import("@/lib/domains/jobs"),
 };
 
 /** Gestionnaire paresseux : un type déclaré sans implémentation échoue (retenté puis DEAD), jamais marqué DONE à tort. */
@@ -221,6 +228,9 @@ const handlers: Record<JobType, Handler> = {
   "shipment.poll": lazyHandler("shipment.poll"),
   "shipment.status_changed": lazyHandler("shipment.status_changed"),
   "pos.session_report": lazyHandler("pos.session_report"),
+  "domain.register": lazyHandler("domain.register"),
+  "domain.renew": lazyHandler("domain.renew"),
+  "domain.poll": lazyHandler("domain.poll"),
   "cart.check": async (p) => {
     const { checkAbandonedCart } = await import("@/lib/carts/service");
     await checkAbandonedCart(p);

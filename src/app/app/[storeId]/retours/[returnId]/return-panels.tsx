@@ -7,7 +7,7 @@ import type { ReturnStatus } from "@prisma/client";
 import type { ActionResult } from "@/lib/action";
 import { approveReturn, cancelReturn, quoteReturnAction, receiveReturn, rejectReturn, resolveReturn, type QuoteView } from "@/lib/returns/actions";
 import { ITEM_CONDITIONS, RESOLUTION_LABELS, type ResolutionKind } from "@/lib/returns/policy";
-import { formatMoney } from "@/lib/money";
+import { formatMoney, minorToInput, moneyInputMode, parseMoneyInput, sanitizeMoneyInput } from "@/lib/money";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, Input, Select, Textarea, Checkbox } from "@/components/ui/field";
@@ -209,7 +209,7 @@ function ResolveForm(props: Parameters<typeof ReturnActions>[0]) {
       else if (!r.ok) toast.error(r.error);
     });
 
-  const effective = amount.trim() ? Number(amount.replace(/\s/g, "")) : quote.amount;
+  const effective = amount.trim() ? (parseMoneyInput(amount, currency) ?? Number.NaN) : quote.amount;
   const credit = Number.isFinite(effective) ? effective + Math.round((effective * policy.storeCreditBonusPercent) / 100) : 0;
   const disabledReason = resolution === "REFUND" && !quote.paid ? "La commande n'est pas payée : remboursement impossible." : resolution === "REFUND" && !canRefund ? "Votre rôle ne permet pas d'enregistrer un remboursement." : null;
 
@@ -276,7 +276,7 @@ function ResolveForm(props: Parameters<typeof ReturnActions>[0]) {
             />
           )}
           <Field id="resolve-amount" label={`Montant retenu (${currency})`} hint={`Laissez vide pour le montant suggéré (${formatMoney(quote.amount, currency)} maximum).`} error={fieldError(state, "amount")}>
-            {(p) => <Input {...p} name="amount" inputMode="numeric" placeholder={String(quote.amount)} value={amount} onChange={(e) => setAmount(e.target.value)} />}
+            {(p) => <Input {...p} name="amount" inputMode={moneyInputMode(currency)} placeholder={minorToInput(quote.amount, currency)} value={amount} onChange={(e) => setAmount(sanitizeMoneyInput(e.target.value, currency))} />}
           </Field>
           {resolution === "STORE_CREDIT" && (
             <p className="text-sm text-ink-muted">

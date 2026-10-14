@@ -2,6 +2,7 @@
  * Caisse : espèces, rendu de monnaie et plafonds de remise (lot 3 §2) — module PUR
  * (tests/pos-cash.test.ts). Montants entiers en XOF (aucune décimale).
  */
+import { formatMoney } from "@/lib/money";
 
 /** Arrondi des espèces au multiple de 5 FCFA (réglage de la boutique). */
 export const CASH_ROUNDING_STEP = 5;
@@ -109,7 +110,7 @@ export type PaymentCheck =
  * Contrôle des paiements multiples d'une vente : Σ encaissé ≥ dû ; le dépassement n'est permis
  * qu'en espèces (rendu de monnaie) ; une référence est exigée pour Mobile Money et carte.
  */
-export function checkPayments(total: number, splits: readonly PaymentSplit[]): PaymentCheck {
+export function checkPayments(total: number, splits: readonly PaymentSplit[], currency = "XOF"): PaymentCheck {
   if (!splits.length) return { ok: false, error: "Ajoutez un moyen de paiement." };
   let paid = 0;
   let cash = 0;
@@ -121,7 +122,7 @@ export function checkPayments(total: number, splits: readonly PaymentSplit[]): P
     paid += s.amount;
     if (s.kind === "pos_cash") cash += s.amount;
   }
-  if (paid < total) return { ok: false, error: `Il manque ${total - paid} FCFA.` };
+  if (paid < total) return { ok: false, error: `Il manque ${formatMoney(total - paid, currency)}.` };
   const over = paid - total;
   if (over > 0 && over > cash) return { ok: false, error: "Le trop-perçu ne peut être rendu qu'en espèces." };
   return { ok: true, paid, change: over };

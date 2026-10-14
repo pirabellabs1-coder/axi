@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireStore } from "@/lib/auth/permissions";
-import { guard, parseForm, fail, success, badIds, zBool, zMoney, zOptionalString, type ActionResult } from "@/lib/action";
+import { guard, parseForm, fail, success, badIds, zBool, zMoneyText, readMoneyFields, zOptionalString, type ActionResult } from "@/lib/action";
 import { audit } from "@/lib/audit";
 import { encryptSecret } from "@/lib/crypto";
 import { PLANS } from "@/config/plans";
@@ -42,10 +42,10 @@ const rateSchema = z.object({
   name: z.string().trim().min(2, "Nom du tarif requis").max(80),
   minWeightGrams: zOptInt,
   maxWeightGrams: zOptInt,
-  minSubtotal: zOptInt,
-  maxSubtotal: zOptInt,
-  price: zMoney,
-  freeAbove: zOptInt,
+  minSubtotal: zMoneyText,
+  maxSubtotal: zMoneyText,
+  price: zMoneyText,
+  freeAbove: zMoneyText,
   etaLabel: zOptionalString,
   active: zBool,
 });
@@ -54,8 +54,12 @@ export async function upsertShippingRate(_prev: ActionResult | undefined, formDa
   return guard(async () => {
     const parsed = parseForm(rateSchema, formData);
     if ("error" in parsed) return parsed.error;
-    const d = parsed.data;
-    const ctx = await requireStore(d.storeId, "delivery.manage");
+    const { minSubtotal: rawMin, maxSubtotal: rawMax, price: rawPrice, freeAbove: rawFree, ...rest } = parsed.data;
+    const ctx = await requireStore(rest.storeId, "delivery.manage");
+    // Montants saisis en unités majeures de la devise de la boutique → unités mineures.
+    const m = readMoneyFields({ minSubtotal: rawMin, maxSubtotal: rawMax, price: rawPrice, freeAbove: rawFree }, { minSubtotal: null, maxSubtotal: null, price: 0, freeAbove: null }, ctx.store.currency);
+    if ("error" in m) return m.error;
+    const d = { ...rest, ...m.values, price: m.values.price ?? 0 };
     const bad = badIds(d.zoneId);
     if (bad) return bad;
     // Les tarifs au poids et au montant sont inclus à partir du plan Starter (spec §5) ; le plan

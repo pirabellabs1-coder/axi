@@ -22,7 +22,7 @@ const ICONS: Record<AddOnId, LucideIcon> = {
 const GROUPS: { title: string; text: string; ids: AddOnId[] }[] = [
   { title: "Grandir", text: "Plus de membres, de numéros et de boutiques, dès Business.", ids: ["EXTRA_MEMBER", "EXTRA_WHATSAPP_NUMBER", "EXTRA_STORE"] },
   { title: "Crédits", text: "Des packs valables 12 mois, ajoutés à votre portefeuille.", ids: ["PACK_WA_UTILITY_500", "PACK_WA_MARKETING_200", "PACK_AI_1000"] },
-  { title: "Espace et adresse", text: "Plus de stockage, votre propre nom de domaine.", ids: ["STORAGE_10GB", "DOMAIN_NAME"] },
+  { title: "Espace et adresse", text: "Plus de stockage. Votre nom de domaine s'achète et se renouvelle directement depuis votre boutique.", ids: ["STORAGE_10GB"] },
   { title: "On le fait pour vous", text: "Un modèle prêt à vendre ou une boutique livrée clé en main.", ids: ["SECTOR_TEMPLATE", "DONE_FOR_YOU"] },
 ];
 

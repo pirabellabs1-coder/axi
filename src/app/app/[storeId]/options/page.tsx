@@ -44,7 +44,7 @@ const REASON_LABEL: Record<string, string> = {
 const GROUPS: { title: string; description: string; ids: AddOnId[] }[] = [
   { title: "Packs de crédits", description: `Rechargez votre portefeuille. Crédits valables ${PACK_VALIDITY_MONTHS} mois, utilisés après ceux inclus dans votre plan.`, ids: ["PACK_WA_UTILITY_500", "PACK_WA_MARKETING_200", "PACK_AI_1000"] },
   { title: "Capacité", description: "Ajoutez de la place à votre plan, sans changer de formule. Résiliable à tout moment, effectif en fin de période.", ids: ["EXTRA_MEMBER", "EXTRA_WHATSAPP_NUMBER", "EXTRA_STORE", "STORAGE_10GB"] },
-  { title: "Services", description: "Nous le faisons pour vous. Notre équipe vous contacte après le paiement.", ids: ["DOMAIN_NAME", "SECTOR_TEMPLATE", "DONE_FOR_YOU"] },
+  { title: "Services", description: "Nous le faisons pour vous. Notre équipe vous contacte après le paiement.", ids: ["SECTOR_TEMPLATE", "DONE_FOR_YOU"] },
 ];
 
 function minPlanFor(a: AddOn): PlanId {

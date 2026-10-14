@@ -117,7 +117,7 @@ export const GLOBAL_GROUPS: GlobalGroup[] = [
       yesNo("header.showCurrencyPicker", "Afficher le sélecteur de devise", "Affiché seulement si la boutique propose au moins deux devises (menu Devises)."),
       { type: "header", content: "Bandeau d'annonce" },
       yesNo("header.announcement.enabled", "Afficher le bandeau"),
-      { type: "text", id: "header.announcement.text", label: "Texte de l'annonce", maxLength: 160, placeholder: "Livraison offerte dès 20 000 FCFA" },
+      { type: "text", id: "header.announcement.text", label: "Texte de l'annonce", maxLength: 160, placeholder: "Nouvelle collection disponible" },
       { type: "url", id: "header.announcement.link", label: "Lien de l'annonce" },
       { type: "select", id: "header.announcement.scheme", label: "Couleurs du bandeau", options: [{ value: "brand", label: "Couleur de marque" }, { value: "inverse", label: "Inversé" }, { value: "default", label: "Par défaut" }] },
     ],

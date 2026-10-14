@@ -8,14 +8,17 @@ import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireUserOrThrow, requireStore, effectivePlanId } from "@/lib/auth/permissions";
-import { fail, success, parseForm, guard, zBool, zOptionalString, type ActionResult } from "@/lib/action";
+import { fail, success, parseForm, guard, zBool, zOptionalString, zMoneyText, readMoneyFields, type ActionResult } from "@/lib/action";
 import { slugify, normalizePhone, addDays } from "@/lib/utils";
+import { currencyDecimals } from "@/lib/money";
 import { COUNTRIES, RESERVED_SLUGS, getCountry } from "@/config/site";
 import { TRIAL_DAYS, TRIAL_PLAN, ZONE_CURRENCY, planRank, zoneForCurrency } from "@/config/plans";
 import { checkStoresQuota, quotaMessage } from "@/lib/commerce/quotas";
 import { audit } from "@/lib/audit";
 import { enqueue } from "@/lib/jobs";
 import { getPreset } from "@/lib/storefront/theme";
+import { getGateway } from "@/lib/payments/gateways";
+import { CURRENCY_LOCKED_MESSAGE, canChangeStoreCurrency, isStoreCurrency } from "@/lib/currency/store-currencies";
 
 /** Secteurs proposés à la création : l'id sert à la fois de `Store.sector` et de `Store.themeId` (presets de thème). */
 const SECTOR_IDS = ["general", "restaurant", "patisserie", "mode", "beaute", "salon", "clinique"] as const;
@@ -36,6 +39,7 @@ const createSchema = z.object({
   name: z.string().trim().min(2, "Nom trop court").max(60, "60 caractères maximum"),
   slug: z.string().trim().min(3, "Adresse trop courte").max(48, "48 caractères maximum"),
   country: z.string().length(2, "Choisissez un pays"),
+  currency: z.string().trim().toUpperCase().refine(isStoreCurrency, "Choisissez une devise proposée"),
   sector: z.enum(SECTOR_IDS, { error: "Choisissez un secteur" }),
   city: zOptionalString,
   doneForYou: zBool,
@@ -58,7 +62,7 @@ export async function createStore(_prev: ActionResult | undefined, formData: For
     const user = await requireUserOrThrow();
     const parsed = parseForm(createSchema, formData);
     if ("error" in parsed) return parsed.error;
-    const { name, country, sector, city, doneForYou } = parsed.data;
+    const { name, country, currency, sector, city, doneForYou } = parsed.data;
     const slug = slugify(parsed.data.slug);
     if (!COUNTRIES.some((c) => c.code === country)) return fail("Pays non pris en charge", { country: ["Pays non pris en charge"] });
     const avail = await isSlugAvailable(slug);
@@ -72,6 +76,7 @@ export async function createStore(_prev: ActionResult | undefined, formData: For
     if (!quota.allowed) return fail(quotaMessage(quota));
 
     const c = getCountry(country);
+    // Zone tarifaire Axi : suit le PAYS (devise usuelle du pays), pas la devise choisie pour les prix.
     const zone = zoneForCurrency(c.currency);
     const billingCurrency = ZONE_CURRENCY[zone];
     const now = new Date();
@@ -83,7 +88,7 @@ export async function createStore(_prev: ActionResult | undefined, formData: For
           slug,
           country,
           city: city || null,
-          currency: c.currency,
+          currency,
           timezone: c.timezone,
           category: SECTOR_CATEGORY[sector],
           sector,
@@ -100,7 +105,7 @@ export async function createStore(_prev: ActionResult | undefined, formData: For
           paymentMethods: {
             create: [{ kind: "CASH_ON_DELIVERY", label: "Paiement à la livraison ou au retrait", instructions: "Réglez en espèces à la réception de votre commande.", position: 0 }],
           },
-          deliveryZones: { create: [{ name: city ? `${city} centre` : "Zone 1", fee: c.currency === "XOF" || c.currency === "XAF" ? 1000 : 500, etaLabel: "Sous 24 h", position: 0 }] },
+          deliveryZones: { create: [{ name: city ? `${city} centre` : "Zone 1", fee: currencyDecimals(currency) === 0 ? 1000 : 500, etaLabel: "Sous 24 h", position: 0 }] },
         },
       });
       // Lot 3 : « Dépôt principal » dès la création (majeur n° 8). Sans lui, la boutique n'a aucun dépôt :
@@ -108,7 +113,7 @@ export async function createStore(_prev: ActionResult | undefined, formData: For
       // d'articles le jour où le commerçant crée son premier dépôt.
       const { ensureDefaultLocationTx } = await import("@/lib/locations/service");
       await ensureDefaultLocationTx(tx, s.id, { country, city: city || null });
-      await audit({ storeId: s.id, actorId: user.id, action: "store.created", metadata: { slug, sector, zone, doneForYou } }, tx);
+      await audit({ storeId: s.id, actorId: user.id, action: "store.created", metadata: { slug, sector, zone, currency, doneForYou } }, tx);
       return s;
     });
     redirect(doneForYou ? `/app/${store.id}/options?addon=DONE_FOR_YOU` : `/app/${store.id}/demarrage`);
@@ -149,6 +154,53 @@ export async function updateStoreContact(_prev: ActionResult | undefined, formDa
   });
 }
 
+/* ───────────────────────── Devise de la boutique ───────────────────────── */
+
+const currencySchema = z.object({
+  storeId: z.string().min(8).max(64),
+  currency: z.string().trim().toUpperCase().refine(isStoreCurrency, "Choisissez une devise proposée"),
+});
+
+/**
+ * Change la devise de la boutique, uniquement tant qu'elle n'a AUCUNE commande ni carte cadeau (historique
+ * comptable). Les montants existants (prix, frais de livraison…) ne sont pas convertis : l'écran le signale.
+ * Effets de bord : la devise d'affichage identique est retirée, les passerelles qui n'encaissent pas la nouvelle
+ * devise sont désactivées.
+ */
+export async function changeStoreCurrency(_prev: ActionResult | undefined, formData: FormData): Promise<ActionResult> {
+  return guard(async () => {
+    const parsed = parseForm(currencySchema, formData);
+    if ("error" in parsed) return parsed.error;
+    const ctx = await requireStore(parsed.data.storeId, "store.settings");
+    const storeId = ctx.store.id;
+    const from = ctx.store.currency;
+    const to = parsed.data.currency;
+    if (from === to) return success(undefined, "Devise inchangée");
+
+    const disabled = await db.$transaction(async (tx) => {
+      const [orders, giftCards] = await Promise.all([tx.order.count({ where: { storeId } }), tx.giftCard.count({ where: { storeId } })]);
+      if (!canChangeStoreCurrency(orders + giftCards)) return null;
+      const gateways = await tx.paymentMethod.findMany({ where: { storeId, kind: "GATEWAY", active: true }, select: { id: true, provider: true } });
+      const off = gateways.filter((m) => !(m.provider && getGateway(m.provider)?.supportedCurrencies.includes(to))).map((m) => m.id);
+      if (off.length) await tx.paymentMethod.updateMany({ where: { storeId, id: { in: off } }, data: { active: false } });
+      await tx.storeCurrency.deleteMany({ where: { storeId, currency: to } });
+      await tx.store.update({ where: { id: storeId }, data: { currency: to } });
+      await audit({ storeId, actorId: ctx.user.id, action: "store.currency_changed", metadata: { from, to, disabledGateways: off.length } }, tx);
+      return off.length;
+    });
+    if (disabled == null) return fail(CURRENCY_LOCKED_MESSAGE, { currency: ["Devise verrouillée"] });
+
+    revalidatePath(`/app/${storeId}`, "layout");
+    revalidatePath(`/s/${ctx.store.slug}`, "layout");
+    return success(
+      undefined,
+      disabled > 0
+        ? `Devise changée en ${to}. ${disabled} passerelle${disabled > 1 ? "s" : ""} incompatible${disabled > 1 ? "s" : ""} désactivée${disabled > 1 ? "s" : ""}. Vérifiez vos prix.`
+        : `Devise changée en ${to}. Vérifiez vos prix.`,
+    );
+  });
+}
+
 const settingsSchema = z.object({
   storeId: z.string(),
   name: z.string().trim().min(2).max(60),
@@ -164,7 +216,7 @@ const settingsSchema = z.object({
   deliveryEnabled: zBool,
   whatsappOrdering: zBool,
   listedInMarketplace: zBool,
-  minOrderAmount: z.coerce.number().int().min(0).default(0),
+  minOrderAmount: zMoneyText, // unités majeures de la devise de la boutique
   orderNotes: z.preprocess((v) => (v === "" ? undefined : v), z.string().max(1000, "1 000 caractères maximum").optional()),
 });
 
@@ -174,6 +226,8 @@ export async function updateStoreSettings(_prev: ActionResult | undefined, formD
     if ("error" in parsed) return parsed.error;
     const { storeId, ...d } = parsed.data;
     const ctx = await requireStore(storeId, "store.settings");
+    const mo = readMoneyFields({ minOrderAmount: d.minOrderAmount }, { minOrderAmount: 0 }, ctx.store.currency);
+    if ("error" in mo) return mo.error;
     const country = getCountry(ctx.store.country);
     const wa = d.whatsappNumber ? normalizePhone(d.whatsappNumber, country.dialCode) : null;
     if (d.whatsappNumber && !wa) return fail("Numéro WhatsApp invalide.", { whatsappNumber: ["Numéro invalide"] });
@@ -197,7 +251,7 @@ export async function updateStoreSettings(_prev: ActionResult | undefined, formD
         deliveryEnabled: d.deliveryEnabled,
         whatsappOrdering: d.whatsappOrdering,
         listedInMarketplace: d.listedInMarketplace && !ctx.store.marketplaceBlocked,
-        minOrderAmount: d.minOrderAmount,
+        minOrderAmount: mo.values.minOrderAmount ?? 0,
         orderNotes: d.orderNotes ?? null,
       },
     });

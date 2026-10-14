@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
+import { minorToInput, moneyStep } from "@/lib/money";
 import { upsertShippingRate, deleteShippingRate, setZoneLocation } from "@/lib/shipping/actions";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ export function RateDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [state, action] = useActionState(upsertShippingRate, undefined);
+  const moneyMode = moneyStep(currency) === "1" ? "numeric" : "decimal";
   const [seen, setSeen] = useState(state);
   if (state !== seen) {
     setSeen(state);
@@ -66,10 +68,10 @@ export function RateDialog({
           </Field>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field id="rprice" label={`Prix (${currency})`} required error={fieldError(state, "price")}>
-              {(p) => <Input {...p} name="price" type="number" inputMode="numeric" min={0} defaultValue={rate?.price ?? 0} className="tabular" />}
+              {(p) => <Input {...p} name="price" type="number" inputMode={moneyMode} min={0} step={moneyStep(currency)} defaultValue={minorToInput(rate?.price ?? 0, currency)} className="tabular" />}
             </Field>
             <Field id="rfree" label={`Offerte dès (${currency})`} error={fieldError(state, "freeAbove")} hint="Vide = jamais offerte.">
-              {(p) => <Input {...p} name="freeAbove" type="number" inputMode="numeric" min={0} defaultValue={rate?.freeAbove ?? ""} className="tabular" />}
+              {(p) => <Input {...p} name="freeAbove" type="number" inputMode={moneyMode} min={0} step={moneyStep(currency)} defaultValue={minorToInput(rate?.freeAbove, currency)} className="tabular" />}
             </Field>
             <Field id="rminw" label="Poids minimum (g)" error={fieldError(state, "minWeightGrams")}>
               {(p) => <Input {...p} name="minWeightGrams" type="number" inputMode="numeric" min={0} defaultValue={rate?.minWeightGrams ?? ""} className="tabular" />}
@@ -78,10 +80,10 @@ export function RateDialog({
               {(p) => <Input {...p} name="maxWeightGrams" type="number" inputMode="numeric" min={0} defaultValue={rate?.maxWeightGrams ?? ""} className="tabular" />}
             </Field>
             <Field id="rmins" label={`Montant minimum (${currency})`} error={fieldError(state, "minSubtotal")}>
-              {(p) => <Input {...p} name="minSubtotal" type="number" inputMode="numeric" min={0} defaultValue={rate?.minSubtotal ?? ""} className="tabular" />}
+              {(p) => <Input {...p} name="minSubtotal" type="number" inputMode={moneyMode} min={0} step={moneyStep(currency)} defaultValue={minorToInput(rate?.minSubtotal, currency)} className="tabular" />}
             </Field>
             <Field id="rmaxs" label={`Montant maximum (${currency})`} error={fieldError(state, "maxSubtotal")}>
-              {(p) => <Input {...p} name="maxSubtotal" type="number" inputMode="numeric" min={0} defaultValue={rate?.maxSubtotal ?? ""} className="tabular" />}
+              {(p) => <Input {...p} name="maxSubtotal" type="number" inputMode={moneyMode} min={0} step={moneyStep(currency)} defaultValue={minorToInput(rate?.maxSubtotal, currency)} className="tabular" />}
             </Field>
           </div>
           <Field id="reta" label="Délai annoncé">{(p) => <Input {...p} name="etaLabel" defaultValue={rate?.etaLabel ?? ""} maxLength={60} placeholder="Sous 48 h" />}</Field>

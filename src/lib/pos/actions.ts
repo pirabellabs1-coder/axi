@@ -4,8 +4,9 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireStore } from "@/lib/auth/permissions";
-import { guard, parseForm, fail, success, badIds, zOptionalString, type ActionResult } from "@/lib/action";
+import { guard, parseForm, fail, success, badIds, zOptionalString, zMoneyText, readMoneyFields, type ActionResult } from "@/lib/action";
 import { audit } from "@/lib/audit";
+import { formatMoney } from "@/lib/money";
 import { PLANS } from "@/config/plans";
 import { newDeviceToken } from "./device";
 import {
@@ -134,7 +135,20 @@ export async function clearPosManagerCode(storeId: string): Promise<ActionResult
   });
 }
 
-const openSchema = z.object({ storeId: z.string(), deviceId: z.string(), openingFloat: z.coerce.number().int().min(0).max(100_000_000) });
+/** Plafond historique des montants de caisse (unités mineures). */
+const POS_MAX_MINOR = 100_000_000;
+
+/** Lit un montant de caisse saisi en unités majeures ; `empty` null = champ obligatoire. */
+function readPosMoney(raw: string, field: string, currency: string, empty: number | null): { value: number } | { error: ActionResult<never> } {
+  const m = readMoneyFields({ [field]: raw }, { [field]: empty }, currency);
+  if ("error" in m) return m;
+  const v = m.values[field];
+  if (v == null) return { error: fail("Indiquez un montant.", { [field]: ["Montant requis"] }) };
+  if (v > POS_MAX_MINOR) return { error: fail("Montant trop élevé.", { [field]: ["Montant trop élevé"] }) };
+  return { value: v };
+}
+
+const openSchema = z.object({ storeId: z.string(), deviceId: z.string(), openingFloat: zMoneyText });
 
 export async function openPosSession(_prev: ActionResult<{ id: string }> | undefined, formData: FormData): Promise<ActionResult<{ id: string }>> {
   return guard(async () => {
@@ -142,13 +156,16 @@ export async function openPosSession(_prev: ActionResult<{ id: string }> | undef
     if ("error" in parsed) return parsed.error;
     const d = parsed.data;
     const ctx = await requireStore(d.storeId, "pos.sell");
+    // Montants de caisse saisis en unités majeures de la devise de la boutique → unités mineures.
+    const mf = readPosMoney(d.openingFloat, "openingFloat", ctx.store.currency, 0);
+    if ("error" in mf) return mf.error;
     const bad = badIds(d.deviceId);
     if (bad) return bad;
     if (PLANS[ctx.planId].limits.posDevices === 0) return fail(posUnavailable(PLANS[ctx.planId].name));
     const device = await db.posDevice.findFirst({ where: { id: d.deviceId, storeId: ctx.store.id, revokedAt: null }, select: { id: true, locationId: true } });
     if (!device) return fail("Appareil introuvable ou révoqué.");
     try {
-      const session = await openSession({ storeId: ctx.store.id, deviceId: device.id, locationId: device.locationId, actorId: ctx.user.id, openingFloat: d.openingFloat });
+      const session = await openSession({ storeId: ctx.store.id, deviceId: device.id, locationId: device.locationId, actorId: ctx.user.id, openingFloat: mf.value });
       revalidatePos(ctx.store.id);
       return success({ id: session.id }, session.reopened ? "Session en cours reprise" : "Caisse ouverte");
     } catch (e) {
@@ -161,7 +178,7 @@ export async function openPosSession(_prev: ActionResult<{ id: string }> | undef
 const closeSchema = z.object({
   storeId: z.string(),
   sessionId: z.string(),
-  countedCash: z.coerce.number().int().min(0).max(100_000_000),
+  countedCash: zMoneyText, // unités majeures
   /** Appareil qui ferme (vérifié : la session doit lui appartenir) et file qu'il déclare (mineur n° 13). */
   deviceId: zOptionalString,
   pendingSales: z.coerce.number().int().min(0).max(100_000).optional(),
@@ -176,6 +193,8 @@ export async function closePosSession(_prev: ActionResult | undefined, formData:
     if ("error" in parsed) return parsed.error;
     const d = parsed.data;
     const ctx = await requireStore(d.storeId, "pos.sell");
+    const counted = readPosMoney(d.countedCash, "countedCash", ctx.store.currency, null);
+    if ("error" in counted) return counted.error;
     const bad = badIds(d.sessionId, ...(d.deviceId ? [d.deviceId] : []));
     if (bad) return bad;
     try {
@@ -183,7 +202,7 @@ export async function closePosSession(_prev: ActionResult | undefined, formData:
         storeId: ctx.store.id,
         sessionId: d.sessionId,
         actorId: ctx.user.id,
-        countedCash: d.countedCash,
+        countedCash: counted.value,
         canManage: ctx.can("store.settings"),
         deviceId: d.deviceId ?? null,
         pendingSales: d.pendingSales ?? 0,
@@ -193,7 +212,7 @@ export async function closePosSession(_prev: ActionResult | undefined, formData:
       });
       revalidatePos(ctx.store.id);
       const gap = report.discrepancy ?? 0;
-      return success(undefined, gap === 0 ? "Caisse fermée : aucun écart" : `Caisse fermée : écart de ${gap > 0 ? "+" : ""}${gap} FCFA`);
+      return success(undefined, gap === 0 ? "Caisse fermée : aucun écart" : `Caisse fermée : écart de ${gap > 0 ? "+" : "−"}${formatMoney(Math.abs(gap), ctx.store.currency)}`);
     } catch (e) {
       if (e instanceof PosSessionError) return fail(e.message);
       throw e;
@@ -205,7 +224,7 @@ const moveSchema = z.object({
   storeId: z.string(),
   sessionId: z.string(),
   kind: z.enum(["in", "out"]),
-  amount: z.coerce.number().int().min(1).max(100_000_000),
+  amount: zMoneyText, // unités majeures
   reason: z.string().trim().min(3, "Motif requis").max(120),
 });
 
@@ -215,6 +234,9 @@ export async function addPosCashMovement(_prev: ActionResult | undefined, formDa
     if ("error" in parsed) return parsed.error;
     const d = parsed.data;
     const ctx = await requireStore(d.storeId, "pos.sell");
+    const mv = readPosMoney(d.amount, "amount", ctx.store.currency, null);
+    if ("error" in mv) return mv.error;
+    if (mv.value < 1) return fail("Indiquez un montant positif.", { amount: ["Montant requis"] });
     const bad = badIds(d.sessionId);
     if (bad) return bad;
     try {
@@ -224,7 +246,7 @@ export async function addPosCashMovement(_prev: ActionResult | undefined, formDa
         actorId: ctx.user.id,
         actorName: ctx.user.name,
         kind: d.kind,
-        amount: d.amount,
+        amount: mv.value,
         reason: d.reason,
         canManage: ctx.can("store.settings"),
       });

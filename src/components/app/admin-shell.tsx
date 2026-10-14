@@ -31,6 +31,7 @@ import {
   LibraryBig,
   ArrowLeftRight,
   Blocks,
+  Globe,
 } from "lucide-react";
 import { AxiMark } from "@/components/ui/logo";
 import { UserMenu } from "@/components/app/user-menu";
@@ -154,6 +155,7 @@ export function AdminShell({
         { href: "/admin/tarifs", label: "Catalogue des prix", icon: Tags },
         { href: "/admin/codes-promo", label: "Codes promo", icon: TicketPercent },
         { href: "/admin/options", label: "Options vendues", icon: Puzzle, count: counts?.addons },
+        { href: "/admin/domaines", label: "Noms de domaine", icon: Globe },
         { href: "/admin/credits", label: "Portefeuilles de crédits", icon: Coins },
         { href: "/admin/paiements", label: "Paiements des ventes", icon: CreditCard },
       ],

@@ -219,41 +219,43 @@ model Store {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  memberships      Membership[]
-  invitations      Invitation[]
-  categories       Category[]
-  products         Product[]
-  carts            Cart[]
-  orders           Order[]
-  customers        Customer[]
-  coupons          Coupon[]
-  deliveryZones    DeliveryZone[]
-  pickupSlots      PickupSlot[]
-  paymentMethods   PaymentMethod[]
-  subscription     Subscription?
-  usageCounters    UsageCounter[]
-  domains          Domain[]
-  integrations     Integration[]
-  notifications    Notification[]
-  jobs             Job[]
-  auditLogs        AuditLog[]
-  automations      Automation[]
-  inventoryMoves   InventoryMovement[]
-  supportTickets   SupportTicket[]
-  addOnPurchases   AddOnPurchase[]
-  creditLedger     CreditLedger[]
-  conversations    Conversation[]
-  quickReplies     QuickReply[]
-  campaigns        Campaign[]
-  reviews          Review[]
-  loyaltyLedger    LoyaltyLedger[]
-  pages            StorePage[]
-  apiTokens        ApiToken[]
-  oauthCodes       OAuthAuthorizationCode[]
-  oauthGrants      OAuthGrant[]
-  apiRequestLogs   ApiRequestLog[]
-  appInstallations AppInstallation[]
-  collaborators    StoreCollaborator[]
+  memberships         Membership[]
+  invitations         Invitation[]
+  categories          Category[]
+  products            Product[]
+  carts               Cart[]
+  orders              Order[]
+  customers           Customer[]
+  coupons             Coupon[]
+  deliveryZones       DeliveryZone[]
+  pickupSlots         PickupSlot[]
+  paymentMethods      PaymentMethod[]
+  subscription        Subscription?
+  usageCounters       UsageCounter[]
+  domains             Domain[]
+  domainRegistrations DomainRegistration[]
+  domainCharges       DomainCharge[]
+  integrations        Integration[]
+  notifications       Notification[]
+  jobs                Job[]
+  auditLogs           AuditLog[]
+  automations         Automation[]
+  inventoryMoves      InventoryMovement[]
+  supportTickets      SupportTicket[]
+  addOnPurchases      AddOnPurchase[]
+  creditLedger        CreditLedger[]
+  conversations       Conversation[]
+  quickReplies        QuickReply[]
+  campaigns           Campaign[]
+  reviews             Review[]
+  loyaltyLedger       LoyaltyLedger[]
+  pages               StorePage[]
+  apiTokens           ApiToken[]
+  oauthCodes          OAuthAuthorizationCode[]
+  oauthGrants         OAuthGrant[]
+  apiRequestLogs      ApiRequestLog[]
+  appInstallations    AppInstallation[]
+  collaborators       StoreCollaborator[]
 
   // Lot 1 : ventes et fidélité
   customerOtps            CustomerOtp[]
@@ -311,16 +313,117 @@ model Store {
 }
 
 model Domain {
-  id          String   @id @default(cuid())
-  storeId     String
-  hostname    String   @unique
-  verified    Boolean  @default(false)
-  verifyToken String
-  isPrimary   Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  id             String              @id @default(cuid())
+  storeId        String
+  hostname       String              @unique
+  verified       Boolean             @default(false)
+  verifyToken    String
+  isPrimary      Boolean             @default(false)
+  createdAt      DateTime            @default(now())
+  store          Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  // Domaine acheté via Axi (revendeur Route 53) : null pour un domaine connecté par le marchand
+  registrationId String?
+  registration   DomainRegistration? @relation(fields: [registrationId], references: [id], onDelete: SetNull)
 
   @@index([storeId])
+  @@index([registrationId])
+}
+
+// Achat / renouvellement de noms de domaine (revendeur Amazon Route 53 Domains). Voir docs/DOMAINES.md.
+enum DomainRegistrationStatus {
+  AWAITING_PAYMENT // facture d'achat émise, non payée
+  PENDING // payée, opération en cours chez le registrar
+  REGISTERED
+  FAILED // échec registrar (relance admin possible)
+  EXPIRED
+  TRANSFERRED_OUT
+  CANCELLED // facture d'achat annulée avant paiement
+}
+
+// Conservées à la suppression d'une boutique (storeId → NULL, titulaire anonymisé par le trigger
+// domain_registration_archive, voir la migration) : trace comptable des achats et des commissions.
+model DomainRegistration {
+  id                    String                   @id @default(cuid())
+  storeId               String?
+  storeName             String? // instantané (boutique supprimée)
+  domainName            String // ASCII (punycode pour un IDN), minuscules
+  registrar             String                   @default("route53")
+  status                DomainRegistrationStatus @default(AWAITING_PAYMENT)
+  operationId           String? // opération d'enregistrement Route 53 en cours
+  years                 Int                      @default(1)
+  registeredAt          DateTime?
+  expiresAt             DateTime?
+  autoRenew             Boolean                  @default(true)
+  privacyProtection     Boolean                  @default(true)
+  // Prix de l'achat initial (détail de chaque achat / renouvellement : DomainCharge)
+  wholesaleCostUsdCents Int
+  price                 Int // unités mineures de `currency`
+  currency              String
+  margin                Int // unités mineures de `currency`
+  // Titulaire = le marchand : { firstName, lastName, organization?, email, phone, address1, city, state?, zip, country }
+  contact               Json
+  hostedZoneId          String?
+  dnsConfiguredAt       DateTime?
+  // Rappels d'échéance déjà envoyés : "<AAAA-MM-JJ de l'échéance>:<jours>"
+  reminders             String[]                 @default([])
+  lastError             String?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  store                 Store?                   @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  charges               DomainCharge[]
+  domains               Domain[]
+
+  @@index([storeId, status])
+  @@index([domainName])
+  @@index([status, expiresAt])
+}
+
+enum DomainChargeKind {
+  REGISTER
+  RENEW
+}
+
+enum DomainChargeStatus {
+  OPEN // facture émise, non payée
+  PAID // facture payée, opération registrar à lancer (job)
+  PROCESSING // appel registrar en cours / soumis
+  APPLIED // achat / renouvellement effectif chez le registrar
+  FAILED // échec registrar après paiement (relance admin)
+  VOID // facture annulée (impayée)
+}
+
+// Historique des achats et renouvellements facturés (1 facture plateforme = 1 charge)
+model DomainCharge {
+  id                    String             @id @default(cuid())
+  registrationId        String
+  storeId               String?
+  kind                  DomainChargeKind
+  years                 Int                @default(1)
+  invoiceId             String?            @unique // NULL si la facture a été supprimée avec la boutique
+  invoiceNumber         String // instantané
+  status                DomainChargeStatus @default(OPEN)
+  wholesaleCostUsdCents Int
+  price                 Int
+  currency              String
+  margin                Int
+  fxRate                String? // instantané du taux USD → devise (10 décimales)
+  marginPercent         Int // en points de base (1500 = 15 %)
+  // Échéance attendue avant renouvellement (idempotence RenewDomain : CurrentExpiryYear)
+  expectedExpiry        DateTime?
+  operationId           String?
+  // Réclamation PAID → PROCESSING : borne `SubmittedSince` de la réconciliation (ListOperations)
+  claimedAt             DateTime?
+  appliedAt             DateTime?
+  lastError             String?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  registration          DomainRegistration @relation(fields: [registrationId], references: [id], onDelete: Restrict)
+  store                 Store?             @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  invoice               Invoice?           @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  @@index([registrationId, createdAt])
+  @@index([storeId, status])
+  @@index([status])
 }
 
 // ─────────────────────────── Catalogue ───────────────────────────
@@ -1142,6 +1245,7 @@ model Invoice {
   providerRef    String?
   createdAt      DateTime      @default(now())
   subscription   Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  domainCharge   DomainCharge?
 
   @@index([subscriptionId])
 }

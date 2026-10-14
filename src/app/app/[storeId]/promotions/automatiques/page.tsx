@@ -3,7 +3,7 @@ import { BadgePercent, Zap, CalendarClock, TrendingDown } from "lucide-react";
 import { getStoreContext } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
 import { PLANS } from "@/config/plans";
-import { formatMoney } from "@/lib/money";
+import { currencyDecimals, formatMoney } from "@/lib/money";
 import { localParts } from "@/lib/reports/daily";
 import { readDiscountConfig, KIND_LABELS } from "@/lib/discounts/schema";
 import { describeDiscount, discountStatus, STATUS_LABELS, type DiscountStatus } from "@/lib/discounts/summary";
@@ -46,7 +46,7 @@ export default async function AutomaticDiscountsPage({ params }: { params: Promi
           storeId={store.id}
           feature="automaticDiscounts"
           description={`Les remises automatiques sont incluses à partir du plan Starter. Votre plan actuel (${PLANS[ctx.planId].name}) ne les propose pas encore. Le changement est immédiat et vos données restent intactes.`}
-          unlocks={["Remise en % ou en montant sur des produits ou collections", "Paliers de panier (−5 % dès 20 000 FCFA…)", "Lots et « 2 achetés = 1 offert » (plan Business)", "Messages de progression au panier"]}
+          unlocks={["Remise en % ou en montant sur des produits ou collections", `Paliers de panier (−5 % dès ${formatMoney(currencyDecimals(store.currency) === 0 ? 20_000 : 5_000, store.currency)}…)`, "Lots et « 2 achetés = 1 offert » (plan Business)", "Messages de progression au panier"]}
         />
       </>
     );
@@ -109,7 +109,7 @@ export default async function AutomaticDiscountsPage({ params }: { params: Promi
         <EmptyState
           icon={BadgePercent}
           title="Aucune remise automatique"
-          description="Créez par exemple « 2 accessoires achetés = 1 offert » ou « −10 % dès 50 000 FCFA » : la remise s'applique seule au panier."
+          description={`Créez par exemple « 2 accessoires achetés = 1 offert » ou « −10 % dès ${formatMoney(currencyDecimals(store.currency) === 0 ? 50_000 : 10_000, store.currency)} » : la remise s'applique seule au panier.`}
           action={<DiscountDialog ctx={dctx} />}
         />
       ) : (

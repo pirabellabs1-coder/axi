@@ -64,11 +64,17 @@ export async function nextInvoiceNumber(tx: Tx | typeof db, year = new Date().ge
   return `AXI-${year}-${String(n + 1).padStart(6, "0")}`;
 }
 
-/** Factures d'options (liées à un AddOnPurchase) : ne modifient jamais l'abonnement. */
+/**
+ * Factures hors abonnement : options (AddOnPurchase.invoiceId) et noms de domaine (DomainCharge.invoiceId).
+ * Elles ne modifient jamais l'abonnement, ne sont ni une dette d'abonnement ni une période de plan.
+ */
 export async function addOnInvoiceIds(invoiceIds: string[], tx: Tx | typeof db = db): Promise<Set<string>> {
   if (invoiceIds.length === 0) return new Set();
-  const rows = await tx.addOnPurchase.findMany({ where: { invoiceId: { in: invoiceIds } }, select: { invoiceId: true } });
-  return new Set(rows.map((r) => r.invoiceId!).filter(Boolean));
+  const [rows, domainRows] = await Promise.all([
+    tx.addOnPurchase.findMany({ where: { invoiceId: { in: invoiceIds } }, select: { invoiceId: true } }),
+    tx.domainCharge.findMany({ where: { invoiceId: { in: invoiceIds } }, select: { invoiceId: true } }),
+  ]);
+  return new Set([...rows.map((r) => r.invoiceId), ...domainRows.map((r) => r.invoiceId)].filter((id): id is string => !!id));
 }
 
 /** Factures émises par une demande de changement de plan (marqueur CHANGE_REQUESTED_ACTION). */
@@ -148,7 +154,7 @@ export type ConfirmSource = { providerRef?: string | null; actorId?: string | nu
  * Idempotente : une facture déjà payée ne déclenche rien.
  * Réutilisable par l'admin : `markInvoicePaid` (src/lib/admin/actions.ts) doit l'appeler.
  */
-export async function confirmInvoicePayment(invoiceId: string, source: ConfirmSource, outerTx?: Tx): Promise<{ ok: boolean; already?: boolean; kind?: "addon" | "plan"; error?: string }> {
+export async function confirmInvoicePayment(invoiceId: string, source: ConfirmSource, outerTx?: Tx): Promise<{ ok: boolean; already?: boolean; kind?: "addon" | "plan" | "domain"; error?: string }> {
   const run = async (tx: Tx) => {
     const invoice = await tx.invoice.findUnique({ where: { id: invoiceId }, include: { subscription: true } });
     if (!invoice) return { ok: false, error: "Facture introuvable" };
@@ -158,6 +164,12 @@ export async function confirmInvoicePayment(invoiceId: string, source: ConfirmSo
     const locked = await tx.invoice.updateMany({ where: { id: invoice.id, status: { in: ["OPEN", "DRAFT", "UNCOLLECTIBLE"] } }, data: { status: "PAID", paidAt: now, providerRef: source.providerRef ?? invoice.providerRef } });
     if (locked.count === 0) return { ok: true, already: true };
     const sub = invoice.subscription;
+
+    // Facture de nom de domaine : achat / renouvellement mis en file (job domain.*), jamais d'effet sur l'abonnement.
+    if (await (await import("@/lib/domains/service")).onDomainInvoicePaid(invoice.id, tx)) {
+      await audit({ storeId: sub.storeId, actorId: source.actorId ?? null, action: "invoice.paid", target: invoice.id, metadata: { number: invoice.number, kind: "domain", via: source.via, providerRef: source.providerRef ?? null, amount: invoice.amount, currency: invoice.currency } }, tx);
+      return { ok: true, kind: "domain" as const };
+    }
 
     const purchases = await tx.addOnPurchase.findMany({ where: { invoiceId: invoice.id } });
     if (purchases.length > 0) {
@@ -169,8 +181,9 @@ export async function confirmInvoicePayment(invoiceId: string, source: ConfirmSo
     const isChange = await isPlanChangeInvoice(invoice.id, tx);
     // Une ancienne facture réglée en retard ne doit pas écraser un plan plus récent.
     const addonInvoices = await tx.addOnPurchase.findMany({ where: { storeId: sub.storeId, invoiceId: { not: null } }, select: { invoiceId: true } });
+    const domainInvoices = await tx.domainCharge.findMany({ where: { storeId: sub.storeId, invoiceId: { not: null } }, select: { invoiceId: true } });
     const latest = await tx.invoice.findFirst({
-      where: { subscriptionId: sub.id, status: { not: "VOID" }, id: { notIn: addonInvoices.map((p) => p.invoiceId!) } },
+      where: { subscriptionId: sub.id, status: { not: "VOID" }, id: { notIn: [...addonInvoices.map((p) => p.invoiceId!), ...domainInvoices.map((d) => d.invoiceId).filter((id): id is string => !!id)] } },
       orderBy: { periodEnd: "desc" },
     });
     const isLatest = !latest || latest.id === invoice.id;
@@ -253,6 +266,18 @@ export async function issuePlanInvoice(
 
 /** Lignes d'une facture pour l'affichage (plan, prorata, options). */
 export async function invoiceLines(invoice: Invoice, tx: Tx | typeof db = db): Promise<{ label: string; detail?: string; quantity: number; amount: number }[]> {
+  const domainCharge = await tx.domainCharge.findUnique({ where: { invoiceId: invoice.id }, include: { registration: { select: { domainName: true } } } });
+  if (domainCharge) {
+    const years = `${domainCharge.years} an${domainCharge.years > 1 ? "s" : ""}`;
+    return [
+      {
+        label: `Nom de domaine ${domainCharge.registration.domainName}`,
+        detail: domainCharge.kind === "REGISTER" ? `Enregistrement pour ${years}, protection de la vie privée incluse.` : `Renouvellement pour ${years}.`,
+        quantity: 1,
+        amount: invoice.amount,
+      },
+    ];
+  }
   const purchases = await tx.addOnPurchase.findMany({ where: { invoiceId: invoice.id } });
   if (purchases.length > 0) {
     return purchases.map((p) => {

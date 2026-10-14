@@ -1,17 +1,32 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ExternalLink, Globe, PackagePlus, ShieldCheck } from "lucide-react";
+import { ExternalLink, Globe, ShieldCheck, ShoppingBag } from "lucide-react";
 import { getStoreContext } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
-import { PLANS, ZONE_CURRENCY, getAddOn, zoneForCurrency, ADD_ON_BILLING_LABEL, type PricingZone } from "@/config/plans";
+import type { DomainRegistrationStatus } from "@prisma/client";
+import { PLANS } from "@/config/plans";
 import { SITE } from "@/config/site";
 import { formatMoney } from "@/lib/money";
+import { formatDate } from "@/lib/utils";
+import { domainSalesEnabled } from "@/lib/domains/registrar";
+import { sellableTlds } from "@/lib/domains/names";
 import { PageHeader, EmptyState, Alert, StatusDot } from "@/components/ui/misc";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PlanGate } from "@/components/app/plan-gate";
 import { CopyButton } from "@/components/app/action-controls";
 import { SlugForm, AddDomainForm, DomainCard } from "./domaine-client";
+import { DomainPurchase, RegistrationActions, type ContactDefaults } from "./purchase-client";
+
+const REG_LABEL: Record<DomainRegistrationStatus, string> = {
+  AWAITING_PAYMENT: "En attente de paiement",
+  PENDING: "Enregistrement en cours",
+  REGISTERED: "Actif",
+  FAILED: "Opération en attente (notre équipe s'en occupe)",
+  EXPIRED: "Expiré",
+  TRANSFERRED_OUT: "Transféré",
+  CANCELLED: "Annulé",
+};
 
 export const metadata: Metadata = { title: "Domaine" };
 
@@ -29,10 +44,27 @@ export default async function DomainPage({ params }: { params: Promise<{ storeId
   const appDomain = SITE.domain.split(":")[0];
   const primary = domains.find((d) => d.verified && d.isPrimary) ?? domains.find((d) => d.verified);
 
-  const domainAddOn = getAddOn("DOMAIN_NAME");
-  const zone = (store.subscription?.zone as PricingZone | undefined) ?? zoneForCurrency(store.currency);
-  const addOnAvailable = !!domainAddOn && domainAddOn.plans.includes(ctx.planId);
-  const addOnPrice = domainAddOn ? formatMoney(domainAddOn.price[zone], ZONE_CURRENCY[zone]) : null;
+  // Domaines achetés via Axi (isolation : filtrés par storeId)
+  const registrations = await db.domainRegistration.findMany({
+    where: { storeId: store.id, status: { not: "CANCELLED" } },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+    include: { charges: { where: { status: "OPEN" }, orderBy: { createdAt: "desc" }, take: 1, select: { invoiceId: true, kind: true } } },
+  });
+  const canSell = hasCustom && domainSalesEnabled();
+  const [firstName, ...rest] = (ctx.user.name ?? "").trim().split(/\s+/);
+  const phone = store.contactPhone ?? store.whatsappNumber ?? "";
+  const defaults: ContactDefaults = {
+    firstName: firstName ?? "",
+    lastName: rest.join(" "),
+    organization: store.name,
+    email: store.contactEmail ?? ctx.user.email,
+    phone: phone ? (phone.startsWith("+") ? phone : `+${phone.replace(/\D/g, "")}`) : "",
+    address1: store.address ?? "",
+    city: store.city ?? "",
+    zip: "",
+    country: store.country ?? "",
+  };
   const live = store.status === "PUBLISHED";
 
   return (
@@ -140,27 +172,63 @@ export default async function DomainPage({ params }: { params: Promise<{ storeId
             )
           )}
 
-          {hasCustom && domainAddOn && (
-            <div className="flex flex-wrap items-center gap-4 rounded-[var(--radius-lg)] bg-surface-2/60 px-5 py-4 ring-1 ring-line">
-              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-accent-soft text-ink">
-                <PackagePlus className="size-[18px]" aria-hidden />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-[15px] font-semibold text-ink">Pas encore de nom de domaine ?</p>
-                <p className="mt-0.5 text-sm text-ink-muted">
-                  Avec l&apos;option « {domainAddOn.name} », Axi achète, configure et renouvelle votre domaine pour vous
-                  {addOnPrice ? ` (${addOnPrice} ${ADD_ON_BILLING_LABEL[domainAddOn.billing]})` : ""}.
+          {hasCustom && (
+            <Card as="section" aria-labelledby="buy-title">
+              <CardHeader
+                title={
+                  <span id="buy-title" className="inline-flex items-center gap-2">
+                    <ShoppingBag className="size-[18px] text-primary" aria-hidden /> Acheter un nom de domaine
+                  </span>
+                }
+                description={`Axi enregistre le domaine à votre nom, le relie à votre boutique (HTTPS inclus) et le renouvelle. Prix en ${store.currency}, payable sur facture.`}
+              />
+              <CardBody>
+                {canSell ? (
+                  <DomainPurchase storeId={store.id} defaults={defaults} tlds={sellableTlds()} />
+                ) : (
+                  <Alert tone="info">L&apos;achat de domaine via Axi arrive bientôt. En attendant, connectez un domaine que vous possédez ci-dessus.</Alert>
+                )}
+                <p className="mt-4 text-sm text-ink-muted">
+                  Domaine en .bj ou autre extension nationale ? Il ne peut pas être acheté via Axi : réservez-le auprès du registre de votre pays, puis connectez-le avec « Connecter un domaine que vous possédez ».
                 </p>
-              </div>
-              {addOnAvailable && (
-                <Link
-                  href={`/app/${store.id}/options#${domainAddOn.id}`}
-                  className="inline-flex h-11 items-center gap-1.5 rounded-full bg-surface px-5 text-sm font-medium text-ink ring-1 ring-inset ring-line-strong transition-colors hover:bg-surface-2"
-                >
-                  Voir l&apos;option
-                </Link>
-              )}
-            </div>
+              </CardBody>
+            </Card>
+          )}
+
+          {registrations.length > 0 && (
+            <ul className="space-y-3" aria-label="Domaines achetés via Axi">
+              {registrations.map((r) => {
+                const open = r.charges[0];
+                return (
+                  <li key={r.id}>
+                    <Card>
+                      <CardBody className="space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-mono text-[15px] text-ink">{r.domainName}</span>
+                          <Badge tone={r.status === "REGISTERED" ? "success" : r.status === "FAILED" || r.status === "EXPIRED" ? "warning" : "neutral"} dot>
+                            {REG_LABEL[r.status]}
+                          </Badge>
+                        </div>
+                        {r.expiresAt && r.status === "REGISTERED" && (
+                          <p className="text-sm text-ink-muted">
+                            Échéance le {formatDate(r.expiresAt)}. {r.autoRenew ? "Facture de renouvellement envoyée 30 jours avant." : "Renouvellement automatique désactivé."}
+                          </p>
+                        )}
+                        {open?.invoiceId && (
+                          <Alert tone="warning" title={open.kind === "REGISTER" ? "Facture d'achat à régler" : "Facture de renouvellement à régler"}>
+                            <Link href={`/app/${store.id}/abonnement/factures/${open.invoiceId}`} className="font-medium text-primary underline-offset-4 hover:underline">
+                              Voir et payer la facture
+                            </Link>
+                          </Alert>
+                        )}
+                        {r.status === "REGISTERED" && <RegistrationActions storeId={store.id} id={r.id} autoRenew={r.autoRenew} canRenew={!open} />}
+                        <p className="text-xs text-ink-muted">Acheté {formatMoney(r.price, r.currency)} · protection de la vie privée {r.privacyProtection ? "active" : "inactive"}</p>
+                      </CardBody>
+                    </Card>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </section>
       </div>

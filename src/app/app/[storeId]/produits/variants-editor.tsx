@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { formatMoney } from "@/lib/money";
+import { currencyDecimals, formatMoney, minorToInput, parseMoneyInput, sanitizeMoneyInput } from "@/lib/money";
 
 export type OptionsChange = { valueRenames?: Record<string, Record<string, string>>; optionRename?: { from: string; to: string } };
 
@@ -505,8 +505,8 @@ export function VariantsTable({
           <p className="w-full text-sm font-medium text-ink" aria-live="polite">
             {selected.size} variante{selected.size > 1 ? "s" : ""} sélectionnée{selected.size > 1 ? "s" : ""}
           </p>
-          <BulkField id="bulk-price" label="Prix" value={bulkPrice} onChange={setBulkPrice} onApply={() => (patchSelected({ price: bulkPrice === "" ? null : Number(bulkPrice) }), setBulkPrice(""))} placeholder={String(basePrice || "")} />
-          <BulkField id="bulk-compare" label="Prix barré" value={bulkCompare} onChange={setBulkCompare} onApply={() => (patchSelected({ compareAtPrice: bulkCompare === "" ? null : Number(bulkCompare) }), setBulkCompare(""))} />
+          <BulkField id="bulk-price" label="Prix" value={bulkPrice} onChange={setBulkPrice} filter={(x) => sanitizeMoneyInput(x, currency)} decimal={currencyDecimals(currency) > 0} onApply={() => (patchSelected({ price: bulkPrice === "" ? null : parseMoneyInput(bulkPrice, currency) }), setBulkPrice(""))} placeholder={basePrice ? minorToInput(basePrice, currency) : ""} />
+          <BulkField id="bulk-compare" label="Prix barré" value={bulkCompare} onChange={setBulkCompare} filter={(x) => sanitizeMoneyInput(x, currency)} decimal={currencyDecimals(currency) > 0} onApply={() => (patchSelected({ compareAtPrice: bulkCompare === "" ? null : parseMoneyInput(bulkCompare, currency) }), setBulkCompare(""))} />
           {trackStock && <BulkField id="bulk-stock" label="Stock" value={bulkStock} onChange={setBulkStock} onApply={() => bulkStock !== "" && (patchSelected({ stock: Number(bulkStock) }), setBulkStock(""))} />}
           <div className="flex flex-wrap gap-2">
             <Button type="button" size="sm" variant="outline" onClick={() => patchSelected({ available: true })}>
@@ -616,18 +616,18 @@ export function VariantsTable({
                     </span>
                   </th>
                   <td className="px-2 py-1.5">
-                    <Input
-                      aria-label={`Prix de ${name}`}
-                      inputMode="numeric"
-                      value={v.price ?? ""}
-                      placeholder={basePrice ? String(basePrice) : "Prix de base"}
-                      onChange={(e) => patch(i, { price: numeric(e.target.value) === "" ? null : Number(numeric(e.target.value)) })}
+                    <MoneyCell
+                      label={`Prix de ${name}`}
+                      value={v.price}
+                      currency={currency}
+                      placeholder={basePrice ? minorToInput(basePrice, currency) : "Prix de base"}
+                      onChange={(price) => patch(i, { price })}
                       className={cellInput}
                       title={`Prix effectif : ${formatMoney(effective, currency)}`}
                     />
                   </td>
                   <td className="px-2 py-1.5">
-                    <Input aria-label={`Prix barré de ${name}`} inputMode="numeric" value={v.compareAtPrice ?? ""} onChange={(e) => patch(i, { compareAtPrice: numeric(e.target.value) === "" ? null : Number(numeric(e.target.value)) })} className={cellInput} />
+                    <MoneyCell label={`Prix barré de ${name}`} value={v.compareAtPrice ?? null} currency={currency} onChange={(compareAtPrice) => patch(i, { compareAtPrice })} className={cellInput} />
                   </td>
                   {trackStock && (
                     <td className="px-2 py-1.5">
@@ -686,7 +686,39 @@ function FilterChip({ pressed, onClick, children, title }: { pressed: boolean; o
   );
 }
 
-function BulkField({ id, label, value, onChange, onApply, placeholder }: { id: string; label: string; value: string; onChange: (v: string) => void; onApply: () => void; placeholder?: string }) {
+/**
+ * Cellule de prix : saisie en unités majeures (« 12.50 »), valeur en unités mineures. Un brouillon texte conserve la
+ * frappe en cours (« 12. ») ; il est resynchronisé quand la valeur change de l'extérieur (édition groupée).
+ */
+export function MoneyCell({ label, value, currency, onChange, placeholder, className, title, allowNegative = false }: { label: string; value: number | null; currency: string; onChange: (v: number | null) => void; placeholder?: string; className?: string; title?: string; allowNegative?: boolean }) {
+  const [draft, setDraft] = useState(() => minorToInput(value, currency));
+  const [seen, setSeen] = useState(value);
+  if (value !== seen) {
+    setSeen(value);
+    const abs = draft.replace("-", "");
+    const current = abs === "" ? null : (parseMoneyInput(abs, currency) ?? 0) * (draft.startsWith("-") ? -1 : 1);
+    if (current !== value) setDraft(minorToInput(value, currency));
+  }
+  return (
+    <Input
+      aria-label={label}
+      inputMode={currencyDecimals(currency) === 0 ? "numeric" : "decimal"}
+      value={draft}
+      placeholder={placeholder}
+      onChange={(e) => {
+        const neg = allowNegative && e.target.value.trim().startsWith("-");
+        const abs = sanitizeMoneyInput(e.target.value, currency);
+        setDraft(neg ? `-${abs}` : abs);
+        const parsed = abs === "" ? null : parseMoneyInput(abs, currency);
+        onChange(parsed == null ? null : neg ? -parsed : parsed);
+      }}
+      className={className}
+      title={title}
+    />
+  );
+}
+
+function BulkField({ id, label, value, onChange, onApply, placeholder, filter, decimal }: { id: string; label: string; value: string; onChange: (v: string) => void; onApply: () => void; placeholder?: string; filter?: (v: string) => string; decimal?: boolean }) {
   return (
     <div className="flex items-end gap-1.5">
       <div>
@@ -695,10 +727,10 @@ function BulkField({ id, label, value, onChange, onApply, placeholder }: { id: s
         </label>
         <Input
           id={id}
-          inputMode="numeric"
+          inputMode={decimal ? "decimal" : "numeric"}
           value={value}
           placeholder={placeholder}
-          onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, ""))}
+          onChange={(e) => onChange(filter ? filter(e.target.value) : e.target.value.replace(/[^\d]/g, ""))}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();

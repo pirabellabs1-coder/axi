@@ -11,6 +11,7 @@
  * DISABLED ◄── désactivation ─┘  EXPIRED ────────────┘
  * « Épuisée » = ACTIVE avec balance = 0 (affichage).
  */
+import { currencyDecimals } from "@/lib/money";
 
 export type GiftCardStatusValue = "ACTIVE" | "DISABLED" | "EXPIRED";
 export type GiftCardDisplayStatus = "ACTIVE" | "EXHAUSTED" | "DISABLED" | "EXPIRED";
@@ -113,12 +114,37 @@ export function giftCardExpiry(issuedAt: Date, validityDays: number | null | und
 }
 
 /**
- * Bornes en unités entières de la devise : valeur faciale 1 000 à 500 000 FCFA, 1 000 000 FCFA de cartes par commande.
- * EUR : équivalents en centimes au taux fixe 655,957. Autres devises : mêmes nombres que le FCFA (à revoir au lot 2).
+ * Bornes d'une carte cadeau, par devise, en unités MAJEURES : [valeur faciale min, max, total max par commande].
+ * Référence : 1 000 à 500 000 FCFA, 1 000 000 FCFA par commande ; les autres devises en sont des équivalents
+ * arrondis (ordre de grandeur, pas une conversion au jour). Couvre toutes les devises de boutique
+ * (src/lib/currency/store-currencies.ts — test de couverture dans tests/giftcard-state.test.ts).
  */
+const GIFT_CARD_BOUNDS_MAJOR: Readonly<Record<string, readonly [number, number, number]>> = {
+  XOF: [1_000, 500_000, 1_000_000],
+  XAF: [1_000, 500_000, 1_000_000],
+  USD: [2, 800, 1_600],
+  GBP: [1, 650, 1_300],
+  CAD: [2, 1_100, 2_200],
+  CHF: [1, 700, 1_400],
+  MAD: [15, 8_000, 16_000],
+  NGN: [2_500, 1_200_000, 2_400_000],
+  GHS: [20, 10_000, 20_000],
+  KES: [200, 100_000, 200_000],
+  ZAR: [30, 14_000, 28_000],
+  GNF: [15_000, 7_000_000, 14_000_000],
+  CDF: [4_000, 2_000_000, 4_000_000],
+};
+
+/** Bornes en unités MINEURES de la devise (centimes pour EUR/USD…, francs pour XOF). */
 export function giftCardLimits(currency: string): { minValue: number; maxValue: number; maxPerOrder: number; maxCardsPerOrder: number } {
+  // EUR : équivalents exacts en centimes au taux fixe 655,957 (historique, inchangé).
   if (currency === "EUR") return { minValue: 152, maxValue: 76_225, maxPerOrder: 152_449, maxCardsPerOrder: MAX_GIFT_CARDS_PER_ORDER };
-  return { minValue: 1_000, maxValue: 500_000, maxPerOrder: 1_000_000, maxCardsPerOrder: MAX_GIFT_CARDS_PER_ORDER };
+  const scale = currencyDecimals(currency) === 0 ? 1 : 100;
+  const known = GIFT_CARD_BOUNDS_MAJOR[currency];
+  // Devise inconnue : bornes FCFA si sans décimales, sinon équivalents euro.
+  if (!known) return scale === 1 ? { minValue: 1_000, maxValue: 500_000, maxPerOrder: 1_000_000, maxCardsPerOrder: MAX_GIFT_CARDS_PER_ORDER } : { minValue: 152, maxValue: 76_225, maxPerOrder: 152_449, maxCardsPerOrder: MAX_GIFT_CARDS_PER_ORDER };
+  const [min, max, perOrder] = known;
+  return { minValue: min * scale, maxValue: max * scale, maxPerOrder: perOrder * scale, maxCardsPerOrder: MAX_GIFT_CARDS_PER_ORDER };
 }
 
 /**

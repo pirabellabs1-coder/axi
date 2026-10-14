@@ -14,7 +14,7 @@ export const COUNTRY_CURRENCY: Readonly<Record<string, string>> = {
   BJ: "XOF", SN: "XOF", CI: "XOF", TG: "XOF", BF: "XOF", ML: "XOF", NE: "XOF", GW: "XOF",
   CM: "XAF", GA: "XAF", CG: "XAF", TD: "XAF", CF: "XAF", GQ: "XAF",
   FR: "EUR", BE: "EUR", DE: "EUR", ES: "EUR", IT: "EUR", PT: "EUR", NL: "EUR", LU: "EUR", IE: "EUR", AT: "EUR", FI: "EUR", GR: "EUR", MC: "EUR",
-  US: "USD", GB: "GBP", CA: "CAD", CH: "CHF", NG: "NGN", GH: "GHS", MA: "MAD", TN: "TND", DZ: "DZD", GN: "GNF", CD: "CDF", RW: "RWF", CN: "CNY", JP: "JPY", AE: "AED",
+  US: "USD", GB: "GBP", CA: "CAD", CH: "CHF", NG: "NGN", GH: "GHS", KE: "KES", ZA: "ZAR", MA: "MAD", TN: "TND", DZ: "DZD", GN: "GNF", CD: "CDF", RW: "RWF", CN: "CNY", JP: "JPY", AE: "AED",
 };
 
 export const isCurrencyCode = (v: unknown): v is string => typeof v === "string" && /^[A-Z]{3}$/.test(v);
@@ -44,7 +44,8 @@ export function pickDisplayCurrency(p: { cookie?: string | null; ipCountry?: str
 export const CURRENCY_NAMES: Readonly<Record<string, string>> = {
   XOF: "Franc CFA (UEMOA)", XAF: "Franc CFA (CEMAC)", EUR: "Euro", USD: "Dollar américain", GBP: "Livre sterling", CAD: "Dollar canadien",
   CHF: "Franc suisse", NGN: "Naira", GHS: "Cedi", MAD: "Dirham marocain", TND: "Dinar tunisien", DZD: "Dinar algérien", GNF: "Franc guinéen",
-  CDF: "Franc congolais", RWF: "Franc rwandais", CNY: "Yuan", JPY: "Yen", AED: "Dirham des Émirats",
+  CDF: "Franc congolais", RWF: "Franc rwandais", CNY: "Yuan", JPY: "Yen", AED: "Dirham des Émirats", KES: "Shilling kényan",
+  ZAR: "Rand sud-africain",
 };
 
 export function currencyName(code: string): string {

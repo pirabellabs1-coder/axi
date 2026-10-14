@@ -10,7 +10,7 @@ import { SubmitButton } from "@/components/forms/submit-button";
 import { FormMessage, fieldError } from "@/components/forms/form-message";
 import { Alert, EmptyState } from "@/components/ui/misc";
 import { toast } from "@/components/ui/toast";
-import { formatMoney } from "@/lib/money";
+import { formatMoney, moneyInputMode, moneyStep, parseMoneyInput, sanitizeMoneyInput } from "@/lib/money";
 import { closePosSession, addPosCashMovement } from "@/lib/pos/actions";
 import { cashPayable, changeDue, checkPayments, discountAmount, type PaymentKind, type PaymentSplit } from "@/lib/pos/cash";
 import { MANAGER_CODE_MAX_LENGTH, MANAGER_CODE_MIN_LENGTH, normalizeManagerCode } from "@/lib/pos/manager-code-shape";
@@ -335,12 +335,13 @@ export function PosApp(props: {
   const discount = discountAmount(subtotal, discountPercent);
   const total = Math.max(0, subtotal - discount);
   const payable = cashPayable(total, true, props.cashRoundingStep);
-  const momoAmount = Number(momo.amount || 0);
-  const cashAmount = Number(cashReceived || 0);
+  // Saisie en unités majeures (« 12,50 » €) → unités mineures ; la file hors ligne et le serveur ne voient que des entiers.
+  const momoAmount = parseMoneyInput(momo.amount, currency) ?? 0;
+  const cashAmount = parseMoneyInput(cashReceived, currency) ?? 0;
   const splits: PaymentSplit[] = [];
-  if (momoAmount > 0) splits.push({ kind: "pos_momo", amount: Math.round(momoAmount), reference: momo.reference });
-  if (cashAmount > 0) splits.push({ kind: "pos_cash", amount: Math.round(cashAmount) });
-  const paymentCheck = checkPayments(payable, splits);
+  if (momoAmount > 0) splits.push({ kind: "pos_momo", amount: momoAmount, reference: momo.reference });
+  if (cashAmount > 0) splits.push({ kind: "pos_cash", amount: cashAmount });
+  const paymentCheck = checkPayments(payable, splits, currency);
   const change = paymentCheck.ok ? paymentCheck.change : changeDue(payable, cashAmount + momoAmount);
 
   const blocked = blockedSales(queue);
@@ -484,7 +485,7 @@ export function PosApp(props: {
           L&apos;instantané du catalogue date de plus de {OFFLINE_MAX_HOURS} h : la vente est bloquée jusqu&apos;à une synchronisation.
         </Alert>
       ) : !session ? (
-        <OpenSessionCard storeId={storeId} deviceToken={token} onOpened={(s) => setSession(s)} />
+        <OpenSessionCard storeId={storeId} currency={currency} deviceToken={token} onOpened={(s) => setSession(s)} />
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_1fr]">
           <Card>
@@ -578,10 +579,10 @@ export function PosApp(props: {
                     {(p) => <Input {...p} type="tel" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="97 00 00 00" />}
                   </Field>
                   <Field id="poscash" label="Espèces reçues">
-                    {(p) => <Input {...p} type="number" inputMode="numeric" min={0} value={cashReceived} onChange={(e) => setCashReceived(e.target.value)} className="tabular" />}
+                    {(p) => <Input {...p} inputMode={moneyInputMode(currency)} value={cashReceived} onChange={(e) => setCashReceived(sanitizeMoneyInput(e.target.value, currency))} className="tabular" />}
                   </Field>
                   <Field id="posmomo" label="Mobile Money">
-                    {(p) => <Input {...p} type="number" inputMode="numeric" min={0} value={momo.amount} onChange={(e) => setMomo((m) => ({ ...m, amount: e.target.value }))} className="tabular" />}
+                    {(p) => <Input {...p} inputMode={moneyInputMode(currency)} value={momo.amount} onChange={(e) => setMomo((m) => ({ ...m, amount: sanitizeMoneyInput(e.target.value, currency) }))} className="tabular" />}
                   </Field>
                   {momoAmount > 0 && (
                     <Field id="posmomoref" label="Référence Mobile Money" required className="col-span-2">
@@ -769,7 +770,7 @@ function TokenForm({ storeId, onToken }: { storeId: string; onToken: (token: str
     </form>
   );
 }
-function OpenSessionCard({ storeId, deviceToken, onOpened }: { storeId: string; deviceToken: string; onOpened: (s: { id: string; openingFloat: number; openedAt: string }) => void }) {
+function OpenSessionCard({ storeId, currency, deviceToken, onOpened }: { storeId: string; currency: string; deviceToken: string; onOpened: (s: { id: string; openingFloat: number; openedAt: string }) => void }) {
   const [openingFloat, setOpeningFloat] = useState("0");
   const [pending, setPending] = useState(false);
   return (
@@ -780,11 +781,13 @@ function OpenSessionCard({ storeId, deviceToken, onOpened }: { storeId: string; 
           className="flex flex-wrap items-end gap-3"
           onSubmit={async (e) => {
             e.preventDefault();
+            // API caisse : entiers en unités mineures.
+            const floatMinor = parseMoneyInput(openingFloat, currency) ?? 0;
             setPending(true);
             const res = await fetch(`/api/pos/${storeId}/sessions`, {
               method: "POST",
               headers: { "content-type": "application/json", [DEVICE_HEADER]: deviceToken },
-              body: JSON.stringify({ openingFloat: Math.max(0, Math.round(Number(openingFloat || 0))) }),
+              body: JSON.stringify({ openingFloat: floatMinor }),
             });
             const data = (await res.json().catch(() => ({}))) as { ok?: boolean; session?: { id: string }; error?: string };
             setPending(false);
@@ -792,12 +795,12 @@ function OpenSessionCard({ storeId, deviceToken, onOpened }: { storeId: string; 
               toast.error(data.error ?? "Ouverture impossible");
               return;
             }
-            onOpened({ id: data.session.id, openingFloat: Math.round(Number(openingFloat || 0)), openedAt: new Date().toISOString() });
+            onOpened({ id: data.session.id, openingFloat: floatMinor, openedAt: new Date().toISOString() });
             toast.success("Caisse ouverte");
           }}
         >
           <Field id="float" label="Fond de caisse" className="min-w-40">
-            {(p) => <Input {...p} type="number" inputMode="numeric" min={0} value={openingFloat} onChange={(e) => setOpeningFloat(e.target.value)} className="tabular" />}
+            {(p) => <Input {...p} inputMode={moneyInputMode(currency)} value={openingFloat} onChange={(e) => setOpeningFloat(sanitizeMoneyInput(e.target.value, currency))} className="tabular" />}
           </Field>
           <Button type="submit" className="h-11 sm:h-10" loading={pending}>
             Ouvrir la caisse
@@ -851,7 +854,7 @@ function SessionCard({
                 </Select>
               )}
             </Field>
-            <Field id="moveamount" label="Montant">{(p) => <Input {...p} name="amount" type="number" inputMode="numeric" min={1} className="tabular" />}</Field>
+            <Field id="moveamount" label="Montant">{(p) => <Input {...p} name="amount" type="number" inputMode={moneyInputMode(currency)} min={0} step={moneyStep(currency)} className="tabular" />}</Field>
           </div>
           <Field id="movereason" label="Motif" error={fieldError(moveState, "reason")}>{(p) => <Input {...p} name="reason" maxLength={120} placeholder="Achat de sachets" />}</Field>
           <SubmitButton variant="secondary" className="w-full">
@@ -875,7 +878,7 @@ function SessionCard({
             error={fieldError(closeState, "countedCash")}
             hint="Le rapport Z compare ce montant aux espèces attendues (fond + encaissements espèces − remboursements espèces − sorties + entrées)."
           >
-            {(p) => <Input {...p} name="countedCash" type="number" inputMode="numeric" min={0} className="tabular" />}
+            {(p) => <Input {...p} name="countedCash" type="number" inputMode={moneyInputMode(currency)} min={0} step={moneyStep(currency)} className="tabular" />}
           </Field>
           <p className="text-xs text-ink-muted">
             Les remboursements en espèces rattachés aux ventes de cette session sont déduits automatiquement. Tout autre

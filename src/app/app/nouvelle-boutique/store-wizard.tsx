@@ -14,6 +14,7 @@ import { SubmitButton } from "@/components/forms/submit-button";
 import { FormMessage } from "@/components/forms/form-message";
 import { slugify, cn } from "@/lib/utils";
 import { SECTORS, getSector, type SectorId } from "./sectors";
+import { STORE_CURRENCY_OPTIONS, defaultStoreCurrency } from "@/lib/currency/store-currencies";
 
 type Zone = "WORLD" | "AFRICA";
 
@@ -37,7 +38,7 @@ const STEPS = [
   { id: 5, title: "Récapitulatif" },
 ] as const;
 
-const FIELD_STEP: Record<string, number> = { name: 1, slug: 1, country: 2, city: 2, sector: 3 };
+const FIELD_STEP: Record<string, number> = { name: 1, slug: 1, country: 2, currency: 2, city: 2, sector: 3 };
 
 type Avail = { available: boolean; reason?: string } | null;
 
@@ -51,6 +52,8 @@ export function StoreWizard({ domain, countries, zoneLabel, firstStore, trial, d
   const [checked, setChecked] = useState<{ slug: string; res: NonNullable<Avail> } | null>(null);
   const [checking, startCheck] = useTransition();
   const [country, setCountry] = useState(countries[0]?.code ?? "BJ");
+  // Devise des prix : pré-sélectionnée selon le pays tant que le commerçant ne l'a pas choisie lui-même.
+  const [currencyChoice, setCurrencyChoice] = useState<string | null>(null);
   const [city, setCity] = useState("");
   const [sector, setSector] = useState<SectorId | "">("");
   const [dfy, setDfy] = useState(false);
@@ -62,6 +65,7 @@ export function StoreWizard({ domain, countries, zoneLabel, firstStore, trial, d
   const avail: Avail = effectiveSlug.length >= 3 && checked?.slug === effectiveSlug ? checked.res : null;
   const selectedCountry = countries.find((c) => c.code === country) ?? countries[0];
   const zone: Zone = selectedCountry?.zone ?? "AFRICA";
+  const currency = currencyChoice ?? defaultStoreCurrency(country, selectedCountry?.currency);
   const sectorOption = getSector(sector);
 
   // Disponibilité de l'adresse (anti-rebond). Le résultat n'est valable que pour l'adresse vérifiée.
@@ -156,6 +160,7 @@ export function StoreWizard({ domain, countries, zoneLabel, firstStore, trial, d
         <input type="hidden" name="name" value={name} />
         <input type="hidden" name="slug" value={effectiveSlug} />
         <input type="hidden" name="country" value={country} />
+        <input type="hidden" name="currency" value={currency} />
         <input type="hidden" name="city" value={city} />
         <input type="hidden" name="sector" value={sector} />
         <input type="hidden" name="doneForYou" value={dfy ? "true" : "false"} />
@@ -236,14 +241,38 @@ export function StoreWizard({ domain, countries, zoneLabel, firstStore, trial, d
 
           {step === 2 && (
             <section aria-labelledby="step-title" className="animate-fade-in">
-              <StepTitle ref={headingRef} title="Où vendez-vous ?" sub="Le pays fixe la devise de vos prix, l'indicatif WhatsApp et votre zone tarifaire Axi." />
+              <StepTitle ref={headingRef} title="Où vendez-vous ?" sub="Le pays fixe l'indicatif WhatsApp et votre zone tarifaire Axi. Choisissez la devise de vos prix." />
               <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <Field id="country" label="Pays" error={errors.country} required>
                   {(p) => (
                     <Select {...p} value={country} autoComplete="country" onChange={(e) => setCountry(e.target.value)}>
                       {countries.map((c) => (
                         <option key={c.code} value={c.code}>
-                          {c.name} ({c.currency})
+                          {c.name}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </Field>
+                <Field
+                  id="currency"
+                  label="Devise de la boutique"
+                  required
+                  error={errors.currency}
+                  hint="Tous vos prix, paniers et commandes seront dans cette devise. Modifiable tant que vous n'avez reçu aucune commande."
+                >
+                  {(p) => (
+                    <Select
+                      {...p}
+                      value={currency}
+                      onChange={(e) => {
+                        setCurrencyChoice(e.target.value);
+                        clearError("currency");
+                      }}
+                    >
+                      {STORE_CURRENCY_OPTIONS.map((o) => (
+                        <option key={o.code} value={o.code}>
+                          {o.label}
                         </option>
                       ))}
                     </Select>
@@ -387,7 +416,7 @@ export function StoreWizard({ domain, countries, zoneLabel, firstStore, trial, d
                   { label: "Nom", value: <span className="font-medium">{name}</span> },
                   { label: "Adresse", value: <span className="font-mono text-[13px]">{effectiveSlug}.{domain}</span> },
                   { label: "Pays", value: `${selectedCountry?.name ?? ""}${city ? `, ${city}` : ""}` },
-                  { label: "Devise des prix", value: selectedCountry?.currency ?? "" },
+                  { label: "Devise des prix", value: currency },
                   { label: "Secteur", value: sectorOption?.label ?? "" },
                   { label: "Formule", value: firstStore ? `Essai ${trial.planName}, ${trial.days} jours` : "Gratuit" },
                   { label: "Zone tarifaire", value: zoneLabel[zone] },
@@ -455,7 +484,7 @@ export function StoreWizard({ domain, countries, zoneLabel, firstStore, trial, d
                   <MapPin className="size-3" aria-hidden /> {city || selectedCountry?.name}
                 </span>
                 {sectorOption && <span className="rounded-full bg-surface-2 px-2.5 py-1 text-ink-muted ring-1 ring-inset ring-line">{sectorOption.label}</span>}
-                <span className="rounded-full bg-surface-2 px-2.5 py-1 text-ink-muted ring-1 ring-inset ring-line">{selectedCountry?.currency}</span>
+                <span className="rounded-full bg-surface-2 px-2.5 py-1 text-ink-muted ring-1 ring-inset ring-line">{currency}</span>
               </div>
             </div>
           </div>

@@ -7,6 +7,7 @@ import { storeLowStockThreshold as storeLowStockThresholdOf } from "@/lib/invent
 import { optionsFromVariants, readOptions } from "@/lib/products/variants";
 import type { DetailInput, ImageInput } from "@/lib/products/schemas";
 import { productKindOf } from "@/lib/digital/kinds";
+import { minorToInput } from "@/lib/money";
 import type { CollectionChoice, ProductFormFeatures, ProductFormValues } from "./product-form";
 
 /** Droits du plan utiles au formulaire produit (affichage ; le serveur reste l'autorité). */
@@ -47,7 +48,7 @@ const toLocalInput = (d: Date | null) => {
 const str = (n: number | null | undefined) => (n == null ? "" : String(n));
 
 /** Produit en base → valeurs du formulaire (options reconstruites pour les produits anciens). */
-export function productToFormValues(p: Product & { variants: Variant[]; optionGroups: (OptionGroup & { options: Option[] })[] }, collectionIds: string[]): ProductFormValues {
+export function productToFormValues(p: Product & { variants: Variant[]; optionGroups: (OptionGroup & { options: Option[] })[] }, collectionIds: string[], currency = "XOF"): ProductFormValues {
   const images = (Array.isArray(p.images) ? (p.images as unknown[]) : [])
     .filter((i): i is ImageInput => !!i && typeof i === "object" && typeof (i as ImageInput).url === "string")
     .map((i) => ({ url: i.url, alt: i.alt ?? "" }));
@@ -70,10 +71,10 @@ export function productToFormValues(p: Product & { variants: Variant[]; optionGr
     tags: p.tags,
     seoTitle: p.seoTitle ?? "",
     seoDescription: p.seoDescription ?? "",
-    price: str(p.price),
-    compareAtPrice: str(p.compareAtPrice),
-    costPrice: str(p.costPrice),
-    promoPrice: str(p.promoPrice),
+    price: minorToInput(p.price, currency),
+    compareAtPrice: minorToInput(p.compareAtPrice, currency),
+    costPrice: minorToInput(p.costPrice, currency),
+    promoPrice: minorToInput(p.promoPrice, currency),
     promoStart: toLocalInput(p.promoStart),
     promoEnd: toLocalInput(p.promoEnd),
     sku: p.sku ?? "",

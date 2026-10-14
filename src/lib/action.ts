@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AuthError } from "@/lib/auth/permissions";
+import { currencyDecimals, readMoneyField } from "@/lib/money";
 
 /** Résultat standard des actions serveur (compatible useActionState). */
 export type ActionResult<T = undefined> =
@@ -52,6 +53,30 @@ export async function guard<T>(fn: () => Promise<ActionResult<T>>): Promise<Acti
 }
 
 export const zMoney = z.coerce.number().int().min(0).max(1_000_000_000);
+
+/**
+ * Montant saisi dans un formulaire, en unités MAJEURES de la devise de la boutique (« 12,50 » €, « 15000 » FCFA).
+ * Le schéma ne garde que le texte ; la conversion en unités mineures se fait après `requireStore`, avec
+ * `readMoneyFields(d, { champ: valeurSiVide }, ctx.store.currency)`.
+ */
+export const zMoneyText = z.preprocess((v) => (v == null ? "" : String(v)), z.string().max(32));
+
+export function readMoneyFields<K extends string>(
+  raw: Record<K, string | undefined>,
+  spec: Record<K, number | null>,
+  currency: string,
+): { values: Record<K, number | null> } | { error: ActionResult<never> } {
+  const values = {} as Record<K, number | null>;
+  for (const key of Object.keys(spec) as K[]) {
+    const r = readMoneyField(raw[key], currency, spec[key]);
+    if (!r.ok) {
+      const msg = currencyDecimals(currency) === 0 ? "Montant invalide (nombre entier, sans décimales)." : "Montant invalide (2 décimales maximum, ex. 12,50).";
+      return { error: fail(msg, { [key]: [msg] }) };
+    }
+    values[key] = r.value;
+  }
+  return { values };
+}
 export const zId = z.string().min(8).max(64);
 
 /** Identifiant brut reçu par une action serveur (cuid) : chaîne non vide aux caractères sûrs, jamais un objet. */

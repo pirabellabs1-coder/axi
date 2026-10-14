@@ -6,7 +6,7 @@ export const schema: SectionSchema = {
   name: "Bandeau d'annonce",
   category: "Structure",
   settings: [SCHEME, { type: "checkbox", id: "autoplay", label: "Défilement automatique", default: true }],
-  blocks: [{ type: "announcement", name: "Annonce", settings: [{ type: "text", id: "text", label: "Texte", default: "Livraison offerte dès 20 000 FCFA", maxLength: 120 }, { type: "url", id: "link", label: "Lien" }] }],
+  blocks: [{ type: "announcement", name: "Annonce", settings: [{ type: "text", id: "text", label: "Texte", default: "Bienvenue dans notre boutique", maxLength: 120 }, { type: "url", id: "link", label: "Lien" }] }],
   maxBlocks: 5,
   presets: [{ name: "Bandeau d'annonce", blocks: [{ type: "announcement" }] }],
 };

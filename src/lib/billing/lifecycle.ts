@@ -211,5 +211,6 @@ export async function runBillingLifecycle(now = new Date()): Promise<{ subscript
   }
   // Phase D : fin d'essai des abonnements d'app (trialing → active), même cadence de cron.
   await (await import("@/lib/apps/billing-lifecycle")).runAppBillingLifecycle(now).catch((e) => console.error("[billing] apps", e));
+  await (await import("@/lib/domains/lifecycle")).runDomainLifecycle(now).catch((e) => console.error("[billing] domains", e));
   return { subscriptions: subs.length, stores: addonStores.length };
 }

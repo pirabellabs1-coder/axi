@@ -6,7 +6,7 @@ import type { OrderStatus, PaymentStatus, FulfillmentType } from "@prisma/client
 import { XCircle, CheckCircle2, Ban, Undo2, Save, ChevronDown, ArrowRight, Check } from "lucide-react";
 import { changeOrderStatus, confirmPayment, failPayment, refundOrder, updateInternalNote, assignCourier } from "@/lib/orders/actions";
 import { nextStatuses, ORDER_ACTION_LABELS } from "@/lib/commerce/order-state";
-import { formatMoney } from "@/lib/money";
+import { formatMoney, minorToInput, moneyInputMode, readMoneyField, sanitizeMoneyInput } from "@/lib/money";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownItem, DropdownLabel, DropdownSeparator } from "@/components/ui/dropdown-menu";
@@ -308,7 +308,7 @@ export function RefundAction({
   const [destination, setDestination] = useState<"original" | "store_credit">("original");
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
-  const [amount, setAmount] = useState(String(remaining));
+  const [amount, setAmount] = useState(minorToInput(remaining, currency));
   const [error, setError] = useState<string | undefined>();
   const canRefund = (paymentStatus === "PAID" || paymentStatus === "PARTIALLY_REFUNDED") && remaining > 0;
   if (!canRefund) return null;
@@ -326,7 +326,7 @@ export function RefundAction({
         variant="outline"
         className="h-11 w-full sm:h-9"
         onClick={() => {
-          setAmount(String(remaining));
+          setAmount(minorToInput(remaining, currency));
           setOpen(true);
         }}
         disabled={pending}
@@ -351,8 +351,10 @@ export function RefundAction({
             <Button
               loading={pending}
               onClick={async () => {
-                const n = Number(amount.replace(/\s/g, ""));
-                if (!Number.isInteger(n) || n <= 0 || n > remaining) return setError(`Montant entre 1 et ${remaining}.`);
+                // Saisie en unités majeures → unités mineures (contrat de refundOrder : entier en unités mineures).
+                const r = readMoneyField(amount, currency, null);
+                const n = r.ok ? r.value : null;
+                if (n == null || n <= 0 || n > remaining) return setError(`Montant entre ${formatMoney(Math.min(remaining, 1), currency)} et ${formatMoney(remaining, currency)}.`);
                 if (await run(() => refundOrder(storeId, orderId, n, note, creditAllowed ? destination : "original"))) close();
               }}
             >
@@ -387,20 +389,20 @@ export function RefundAction({
             {(p) => (
               <Input
                 {...p}
-                inputMode="numeric"
+                inputMode={moneyInputMode(currency)}
                 value={amount}
                 onChange={(e) => {
-                  setAmount(e.target.value);
+                  setAmount(sanitizeMoneyInput(e.target.value, currency));
                   setError(undefined);
                 }}
               />
             )}
           </Field>
           <div className="flex gap-2">
-            <Button size="sm" variant="secondary" onClick={() => setAmount(String(remaining))}>
+            <Button size="sm" variant="secondary" onClick={() => setAmount(minorToInput(remaining, currency))}>
               Total
             </Button>
-            <Button size="sm" variant="secondary" onClick={() => setAmount(String(Math.floor(remaining / 2)))}>
+            <Button size="sm" variant="secondary" onClick={() => setAmount(minorToInput(Math.floor(remaining / 2), currency))}>
               Moitié
             </Button>
           </div>

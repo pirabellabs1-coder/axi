@@ -12,7 +12,7 @@ import { SubmitButton } from "@/components/forms/submit-button";
 import { FormMessage, fieldError } from "@/components/forms/form-message";
 import { ActionButton, AsyncSwitch, ConfirmActionButton } from "@/components/app/action-controls";
 import { EmptyState } from "@/components/ui/misc";
-import { formatMoney } from "@/lib/money";
+import { formatMoney, minorToInput, moneyStep } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 export const DAYS = [
@@ -64,10 +64,10 @@ export function ZoneDialog({ storeId, zone, currency, city, variant = "secondary
           </Field>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field id="zfee" label={`Frais (${currency})`} required error={fieldError(state, "fee")} hint="0 = livraison gratuite.">
-              {(p) => <Input {...p} name="fee" type="number" inputMode="numeric" min={0} defaultValue={zone?.fee ?? 0} className="tabular" />}
+              {(p) => <Input {...p} name="fee" type="number" inputMode={moneyStep(currency) === "1" ? "numeric" : "decimal"} min={0} step={moneyStep(currency)} defaultValue={minorToInput(zone?.fee ?? 0, currency)} className="tabular" />}
             </Field>
             <Field id="zfree" label={`Offerte dès (${currency})`} error={fieldError(state, "freeAbove")} hint="Vide = jamais offerte.">
-              {(p) => <Input {...p} name="freeAbove" type="number" inputMode="numeric" min={0} defaultValue={zone?.freeAbove ?? ""} className="tabular" />}
+              {(p) => <Input {...p} name="freeAbove" type="number" inputMode={moneyStep(currency) === "1" ? "numeric" : "decimal"} min={0} step={moneyStep(currency)} defaultValue={minorToInput(zone?.freeAbove, currency)} className="tabular" />}
             </Field>
           </div>
           <Field id="zeta" label="Délai affiché" error={fieldError(state, "etaLabel")} hint="Par exemple « Sous 24 h » ou « Le jour même avant 14 h ».">

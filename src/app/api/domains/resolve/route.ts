@@ -8,7 +8,8 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  const host = (url.searchParams.get("host") ?? "").toLowerCase().split(":")[0].trim();
+  // `domain` : paramètre envoyé par Caddy (on_demand_tls { ask … }), `host` : src/proxy.ts. Voir docs/DOMAINES.md.
+  const host = (url.searchParams.get("host") ?? url.searchParams.get("domain") ?? "").toLowerCase().split(":")[0].trim();
   if (!host || host.length > 253 || !/^[a-z0-9.-]+$/.test(host)) return new Response("Bad Request", { status: 400 });
 
   const d = await db.domain.findUnique({ where: { hostname: host }, select: { verified: true, store: { select: { slug: true, status: true } } } });

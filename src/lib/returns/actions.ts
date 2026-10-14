@@ -8,7 +8,7 @@ import { requireStore, effectivePlanId, type StoreContext } from "@/lib/auth/per
 import { guard, parseForm, fail, success, zBool, zRawId, badIds, type ActionResult } from "@/lib/action";
 import { audit } from "@/lib/audit";
 import { PLANS } from "@/config/plans";
-import { parseMoneyInput } from "@/lib/money";
+import { readMoneyField } from "@/lib/money";
 import { clientIp, rateLimitAll, rateLimitMessage } from "@/lib/rate-limit";
 import { StoreCreditError } from "@/lib/store-credit/errors";
 import { buyerResolutions, ITEM_CONDITION_KEYS, parseReturnPolicy, parseTagList, returnPolicySchema, RETURN_REASON_KEYS } from "./policy";
@@ -192,7 +192,9 @@ export async function resolveReturn(_prev: ActionResult | undefined, formData: F
     if (d.resolution === "REFUND" && !ctx.can("payments.confirm")) return fail("Votre rôle ne permet pas d'enregistrer un remboursement.");
     let amount: number | null = null;
     if (d.amount) {
-      amount = parseMoneyInput(d.amount, ctx.store.currency);
+      // Unités majeures (« 12,50 » €) → unités mineures ; 3 décimales ou plus refusées.
+      const m = readMoneyField(d.amount, ctx.store.currency, null);
+      amount = m.ok ? m.value : null;
       if (amount == null) return fail("Montant invalide", { amount: ["Montant invalide"] });
     }
     const r = await resolveSvc({

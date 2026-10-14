@@ -188,7 +188,7 @@ export async function markInvoicePaid(invoiceId: string, providerRef?: string): 
     });
     if (!result.ok) return fail(result.error ?? "Paiement non confirmé");
     revalidatePath("/admin", "layout");
-    return success(undefined, result.kind === "addon" ? `Facture ${invoice.number} payée : option activée` : `Facture ${invoice.number} payée : abonnement actif`);
+    return success(undefined, result.kind === "domain" ? `Facture ${invoice.number} payée : opération sur le nom de domaine lancée` : result.kind === "addon" ? `Facture ${invoice.number} payée : option activée` : `Facture ${invoice.number} payée : abonnement actif`);
   });
 }
 
