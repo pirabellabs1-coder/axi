@@ -22,6 +22,7 @@ import { WhatsappForm } from "./whatsapp-form";
 import { CloudApiForm } from "./cloud-api-form";
 import { EmbeddedSignupButton } from "./embedded-signup";
 import { buildEmbeddedSignupSetup } from "@/lib/whatsapp/embedded-signup-prefill";
+import { apiNumberDigits } from "@/lib/whatsapp/phone-sync";
 import { MessagePreview } from "./message-preview";
 
 export const metadata: Metadata = { title: "WhatsApp" };
@@ -112,7 +113,14 @@ export default async function WhatsappPage({ params }: { params: Promise<{ store
       </div>
 
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <WhatsappForm storeId={store.id} number={store.whatsappNumber ?? ""} ordering={store.whatsappOrdering} dialCode={country.dialCode} previewMessage={previewMessage} />
+        <WhatsappForm
+          storeId={store.id}
+          number={store.whatsappNumber ?? ""}
+          ordering={store.whatsappOrdering}
+          dialCode={country.dialCode}
+          previewMessage={previewMessage}
+          apiNumber={status === "active" ? apiNumberDigits((cfg as { displayPhoneNumber?: string }).displayPhoneNumber) : null}
+        />
         <MessagePreview storeName={store.name} message={previewMessage} />
       </div>
 

@@ -6,7 +6,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireStore } from "@/lib/auth/permissions";
 import { guard, parseForm, fail, success, zBool, zOptionalString, type ActionResult } from "@/lib/action";
-import { normalizePhone } from "@/lib/utils";
+import { apiNumberDigits, normalizeWaNumber } from "./phone-sync";
 import { getCountry } from "@/config/site";
 import { PLANS } from "@/config/plans";
 import { encryptSecret } from "@/lib/crypto";
@@ -27,13 +27,31 @@ export async function updateWhatsapp(_prev: ActionResult | undefined, formData: 
     if ("error" in parsed) return parsed.error;
     const ctx = await requireStore(parsed.data.storeId, "store.settings");
     const country = getCountry(ctx.store.country);
-    const wa = normalizePhone(parsed.data.whatsappNumber, country.dialCode);
+    const wa = normalizeWaNumber(parsed.data.whatsappNumber, country.dialCode);
     if (!wa) return fail("Numéro WhatsApp invalide pour ce pays.", { whatsappNumber: ["Numéro invalide"] });
     await db.store.update({ where: { id: ctx.store.id }, data: { whatsappNumber: wa, whatsappOrdering: parsed.data.whatsappOrdering } });
     await audit({ storeId: ctx.store.id, actorId: ctx.user.id, action: "store.whatsapp_updated" });
     revalidatePath(`/app/${ctx.store.id}/whatsapp`);
     revalidatePath(`/s/${ctx.store.slug}`, "layout");
     return success(undefined, "WhatsApp enregistré");
+  });
+}
+
+/**
+ * Aligne le numéro « Commander sur WhatsApp » sur le numéro relié à l'API (mode partenaire ou saisie manuelle),
+ * pour que les messages des clients arrivent dans la boîte Axi.
+ */
+export async function alignWhatsappNumberWithApi(storeId: string): Promise<ActionResult<{ number: string }>> {
+  return guard(async () => {
+    const ctx = await requireStore(storeId, "store.settings");
+    const integ = await db.integration.findUnique({ where: { storeId_kind: { storeId: ctx.store.id, kind: "whatsapp_cloud" } }, select: { status: true, config: true } });
+    const apiNumber = apiNumberDigits((integ?.config as { displayPhoneNumber?: string } | null)?.displayPhoneNumber);
+    if (!integ || integ.status !== "active" || !apiNumber) return fail("Aucun numéro n'est relié à l'API WhatsApp pour le moment.");
+    await db.store.update({ where: { id: ctx.store.id }, data: { whatsappNumber: apiNumber } });
+    await audit({ storeId: ctx.store.id, actorId: ctx.user.id, action: "store.whatsapp_updated", metadata: { source: "api_number" } });
+    revalidatePath(`/app/${ctx.store.id}/whatsapp`);
+    revalidatePath(`/s/${ctx.store.slug}`, "layout");
+    return success({ number: apiNumber }, "Numéro aligné sur celui relié à l'API.");
   });
 }
 
@@ -159,10 +177,11 @@ export async function finishEmbeddedSignup(input: { storeId: string; code: strin
       throw e;
     }
 
-    // Renseigne le numéro wa.me s'il est absent, à partir du numéro affiché par Meta (lien de commande inclus partout).
-    if (!ctx.store.whatsappNumber && result.displayPhoneNumber) {
-      const wa = normalizePhone(result.displayPhoneNumber, getCountry(ctx.store.country).dialCode);
-      if (wa) await db.store.update({ where: { id: ctx.store.id }, data: { whatsappNumber: wa } });
+    // Renseigne le numéro wa.me s'il est absent avec CE numéro (format international, quel que soit le pays) :
+    // les clients qui cliquent « Commander sur WhatsApp » écrivent ainsi au numéro relié à l'API.
+    const apiNumber = apiNumberDigits(result.displayPhoneNumber);
+    if (!ctx.store.whatsappNumber && apiNumber) {
+      await db.store.update({ where: { id: ctx.store.id }, data: { whatsappNumber: apiNumber } });
     }
 
     await audit({ storeId: ctx.store.id, actorId: ctx.user.id, action: "integration.whatsapp_cloud.connected", metadata: { phoneNumberId: result.phoneNumberId, source: "embedded_signup" } });
