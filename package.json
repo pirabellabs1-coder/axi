@@ -1,0 +1,55 @@
+{
+  "name": "axi",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "prisma db seed",
+    "db:studio": "prisma studio",
+    "jobs": "node --conditions=react-server --import tsx scripts/jobs-worker.ts",
+    "postinstall": "prisma generate",
+    "db:local": "node scripts/dev-db.mjs",
+    "media:migrate": "node --conditions=react-server --import tsx scripts/migrate-images.ts",
+    "media:orphans": "node --conditions=react-server --import tsx scripts/media-orphans.ts",
+    "e2e": "playwright test",
+    "e2e:report": "playwright show-report e2e-report"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@node-rs/argon2": "^2.2.2",
+    "@prisma/client": "6.19.3",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.55.0",
+    "next": "16.4.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "server-only": "^0.0.1",
+    "tailwind-merge": "^3.7.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.0",
+    "@tailwindcss/turbopack": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "embedded-postgres": "18.4.0-beta.17",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.0",
+    "prisma": "6.19.3",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.15",
+    "typescript": "^5",
+    "vitest": "^5.0.3"
+  },
+  "packageManager": "pnpm@10.33.0"
+}

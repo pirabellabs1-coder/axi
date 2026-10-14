@@ -1,0 +1,30 @@
+# Brief commun : vague 2 (lot 1 bis, lot 2, lot 4A) — 11/10/2026
+
+10 équipes travaillent EN PARALLÈLE sur la même copie du dépôt, la même base Postgres (port 5433) et le même serveur de dev (port 3000). Ce document fixe la propriété des fichiers. Il prime sur les tableaux d'équipes des specs en cas de divergence.
+
+## Règles communes
+- Lire : `CLAUDE.md`, `docs/CONVENTIONS.md`, la spec de son lot (`docs/specs/LOT-2-international-contenu.md`, `docs/specs/LOT-4-personnalisation.md`, `docs/FEUILLE-DE-ROUTE.md` « Lot 1 bis », `docs/ANALYSE-CONCURRENTIELLE.md` §8), `design-system/axi/MASTER.md` pour l'UI.
+- Le schéma de la vague est DÉJÀ appliqué et le client Prisma régénéré (migrations `20261011170000_lot1bis_paiements_whatsapp`, `20261011180000_lot2_international_contenu`, `20261011190000_lot4_personnalisation`). **Personne ne modifie `prisma/schema.prisma` ni les migrations.** Un champ manque : le contourner proprement et le signaler dans le rapport final.
+- Clés de plan, scopes MCP, types de jobs et contrats de thème (TemplateId blog/article, motion, visibility, animation, alternates, `$source`) sont déjà livrés : `src/config/plans.ts`, `src/lib/mcp/scopes.ts`, `src/lib/jobs.ts` (gestionnaires vides `export const handlers: JobHandlers = {}` dans le dossier de chaque équipe), `src/lib/theme-engine/types.ts`. Ne modifier ces fichiers partagés que par **ajout d'une ligne**, après les avoir relus juste avant l'édition.
+- **Ne jamais modifier un fichier possédé par une autre équipe.** Exception : ajout d'UNE ligne d'enregistrement (import, entrée de registre, lien de menu dans `src/components/app/app-shell.tsx`), en relisant le fichier juste avant.
+- Documentation : chaque équipe écrit sa doc dans un fichier NOUVEAU à elle, `docs/vague2/<equipe>.md` (guide commerçant, scénarios de recette, architecture, MCP). Une étape finale consolidera dans les documents principaux. Ne pas éditer `docs/GUIDE-BOUTIQUE.md`, `docs/RECETTE.md`, `docs/ARCHITECTURE.md`, `docs/CONSTRUCTEUR-BOUTIQUE.md`, `docs/AUDIT-SECURITE.md` (une équipe de clôture du lot 1 les modifie).
+- Machine partagée : ne lancer que les tests ciblés pendant le travail ; la suite complète `pnpm exec vitest run` une seule fois à la fin. Pas plus d'un navigateur Playwright à la fois par équipe. **Ne jamais lancer `next build`, ne jamais tuer un serveur** (dev 3000, prod 3100).
+- Qualité : actions serveur `guard` + zod + `requireStore(capacité)` + filtre `storeId` + `audit()` + `enqueue()` en transaction ; UI en français, kit `src/components/ui` (non modifiable), états vide/chargement/erreur, mobile d'abord, AA, cibles ≥ 44 px ; contrôle de plan côté serveur ; tests Vitest des fonctions pures et de l'isolation entre boutiques ; aucune nouvelle dépendance sans raison forte.
+- Fin de mission : `pnpm exec tsc --noEmit`, `pnpm exec vitest run`, `pnpm lint` (0 erreur), vérification réelle sur http://localhost:3000 (Playwright headless, Chrome système `C:/Program Files/Google/Chrome/Application/chrome.exe` ; comptes demo@axi.africa / Demo-Axi-2026! et admin@axi.africa / Admin-Axi-2026!), rapport en français : livré, vérifié comment, écarts, fichiers hors périmètre touchés.
+
+## Propriété des fichiers
+
+| Équipe | Propriété exclusive |
+|---|---|
+| **P1 Paiements Wave / Orange (lot 1 bis)** | `src/lib/payments/**` (adaptateurs paystack, pawapay, cinetpay dans les passerelles ; `provider.ts` GatewayId), `src/app/api/webhooks/payments/**` (ou chemin existant des webhooks de paiement), `src/app/app/[storeId]/paiements/**`, `src/lib/payment-methods/**` |
+| **P2 Catalogue WhatsApp et flux (lot 1 bis)** | `src/lib/social/**`, `src/app/s/[slug]/feeds/**`, `src/app/app/[storeId]/integrations/whatsapp-catalogue/**` (ou nouvel écran sous intégrations), outils MCP `src/lib/mcp/merchant/social.ts` |
+| **C Cœur commerce : devises + taxes dans le pipeline (lot 2 B)** | `src/lib/commerce/**`, `src/lib/storefront/actions.ts`, `src/lib/currency/**`, `src/app/app/[storeId]/devises/**`, `src/components/storefront/currency-picker.tsx`, `src/app/s/[slug]/commander/**`, appels `emitDomainEvent` dans les transitions de commande |
+| **T Taxes et factures (lot 2 C)** | `src/config/taxes.ts`, `src/lib/tax/**` (fonctions pures fournies à C dès le début), `src/app/app/[storeId]/parametres/taxes/**`, `src/app/app/[storeId]/commandes/[orderId]/facture/**`, `src/app/suivi/[token]/facture/**` |
+| **B Blog (lot 2 D)** | `src/lib/blog/**` (dont `section-schemas.ts` pour ses schémas de sections), `src/app/s/[slug]/blog/**`, `src/app/app/[storeId]/blog/**`, `src/components/storefront/sections/{blog-posts,main-blog,main-article}.tsx` ; une ligne d'enregistrement dans l'agrégateur de schémas et dans `render-registry.tsx` |
+| **W API REST et webhooks (lot 2 E)** | `src/lib/webhooks/**`, `src/lib/api/**`, `src/app/api/v1/**`, `src/app/app/[storeId]/integrations/webhooks/**`, `src/lib/mcp/merchant/content.ts`, `public/api/**`, `docs/API-REST.md` ; fournit `emitDomainEvent` (C l'appelle pour les commandes ; W ajoute lui-même UNE ligne dans `src/lib/products/actions.ts`) |
+| **T1 Moteur de thème (lot 4A)** | `src/lib/theme-engine/**` (refactor `section-schemas/` EN PREMIER, puis quality.ts, motion.ts, dynamic-sources.ts, audience.ts, alternates.ts, operations), `src/lib/storefront/theme-doc.ts` |
+| **T2 Éditeur (lot 4A)** | `src/components/theme-editor/**`, `src/app/app/[storeId]/apparence/**` |
+| **T3 Rendu boutique (lot 4A)** | `src/components/storefront/**` SAUF `account/**`, `gift-card-input.tsx`, `promotions/**`, `currency-picker.tsx`, les sections blog ; `src/lib/theme-engine/render-registry.tsx` |
+| **D Données : champs personnalisés, sections enregistrées, bibliothèque (lot 4A, T5)** | `src/lib/metafields/**`, `src/components/app/metafields-editor.tsx`, `src/lib/saved-sections/**`, `src/lib/section-library/**`, `src/app/admin/bibliotheque/**` ; insertion de `<MetafieldsEditor>` dans les formulaires produit / collection / page / client par ajout d'une ligne |
+
+Reporté après cette vague (conflits avec T3) : langues et traduction de l'interface boutique (lot 2 A), puis 4B, 4C, 4D, lot 3.

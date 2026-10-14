@@ -1,0 +1,5166 @@
+{
+  "keys": [
+    "announcement-bar",
+    "hero-banner",
+    "slideshow",
+    "image-with-text",
+    "rich-text",
+    "featured-collection",
+    "featured-product",
+    "collection-list",
+    "product-grid",
+    "multicolumn",
+    "image-gallery",
+    "video",
+    "testimonials",
+    "reviews",
+    "faq",
+    "newsletter",
+    "whatsapp-cta",
+    "contact",
+    "opening-hours",
+    "map",
+    "logo-list",
+    "countdown",
+    "trust-badges",
+    "custom-spacer",
+    "main-product",
+    "product-recommendations",
+    "main-collection",
+    "main-page",
+    "main-cart",
+    "cart-progress"
+  ],
+  "schemas": {
+    "announcement-bar": {
+      "type": "announcement-bar",
+      "name": "Bandeau d'annonce",
+      "category": "Structure",
+      "settings": [
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        },
+        {
+          "type": "checkbox",
+          "id": "autoplay",
+          "label": "Défilement automatique",
+          "default": true
+        }
+      ],
+      "blocks": [
+        {
+          "type": "announcement",
+          "name": "Annonce",
+          "settings": [
+            {
+              "type": "text",
+              "id": "text",
+              "label": "Texte",
+              "default": "Livraison offerte dès 20 000 FCFA",
+              "maxLength": 120
+            },
+            {
+              "type": "url",
+              "id": "link",
+              "label": "Lien"
+            }
+          ]
+        }
+      ],
+      "maxBlocks": 5,
+      "presets": [
+        {
+          "name": "Bandeau d'annonce",
+          "blocks": [
+            {
+              "type": "announcement"
+            }
+          ]
+        }
+      ]
+    },
+    "hero-banner": {
+      "type": "hero-banner",
+      "name": "Bannière principale",
+      "category": "Mise en avant",
+      "settings": [
+        {
+          "type": "image",
+          "id": "image",
+          "label": "Image (ordinateur)"
+        },
+        {
+          "type": "image",
+          "id": "image_mobile",
+          "label": "Image (mobile)",
+          "info": "Optionnelle : recadrage dédié au téléphone."
+        },
+        {
+          "type": "segmented",
+          "id": "height",
+          "label": "Hauteur",
+          "default": "large",
+          "options": [
+            {
+              "value": "small",
+              "label": "Petite"
+            },
+            {
+              "value": "medium",
+              "label": "Moyenne"
+            },
+            {
+              "value": "large",
+              "label": "Grande"
+            },
+            {
+              "value": "full",
+              "label": "Plein écran"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "layout",
+          "label": "Disposition",
+          "default": "overlay",
+          "options": [
+            {
+              "value": "overlay",
+              "label": "Texte sur l'image"
+            },
+            {
+              "value": "split",
+              "label": "Image et texte côte à côte"
+            },
+            {
+              "value": "below",
+              "label": "Texte sous l'image"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "content_position",
+          "label": "Position du texte",
+          "default": "bottom-left",
+          "options": [
+            {
+              "value": "center",
+              "label": "Centre"
+            },
+            {
+              "value": "bottom-left",
+              "label": "Bas gauche"
+            },
+            {
+              "value": "middle-left",
+              "label": "Milieu gauche"
+            },
+            {
+              "value": "bottom-center",
+              "label": "Bas centre"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "overlay_opacity",
+          "label": "Assombrir l'image",
+          "default": 30,
+          "min": 0,
+          "max": 80,
+          "step": 5,
+          "unit": "%"
+        },
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "type": "heading",
+          "name": "Titre",
+          "settings": [
+            {
+              "type": "text",
+              "id": "text",
+              "label": "Titre",
+              "default": "Titre",
+              "maxLength": 120
+            },
+            {
+              "type": "select",
+              "id": "size",
+              "label": "Taille",
+              "default": "lg",
+              "options": [
+                {
+                  "value": "md",
+                  "label": "Moyen"
+                },
+                {
+                  "value": "lg",
+                  "label": "Grand"
+                },
+                {
+                  "value": "xl",
+                  "label": "Très grand"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "name": "Texte",
+          "settings": [
+            {
+              "type": "richtext",
+              "id": "text",
+              "label": "Texte",
+              "default": ""
+            }
+          ]
+        },
+        {
+          "type": "button",
+          "name": "Bouton",
+          "limit": 2,
+          "settings": [
+            {
+              "type": "text",
+              "id": "button_label",
+              "label": "Texte du bouton",
+              "default": "Voir la boutique",
+              "maxLength": 40
+            },
+            {
+              "type": "url",
+              "id": "button_link",
+              "label": "Lien du bouton",
+              "default": "/catalogue"
+            },
+            {
+              "type": "segmented",
+              "id": "button_style",
+              "label": "Style",
+              "default": "solid",
+              "options": [
+                {
+                  "value": "solid",
+                  "label": "Plein"
+                },
+                {
+                  "value": "secondary",
+                  "label": "Secondaire"
+                },
+                {
+                  "value": "outline",
+                  "label": "Contour"
+                },
+                {
+                  "value": "link",
+                  "label": "Lien"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "maxBlocks": 5,
+      "presets": [
+        {
+          "name": "Bannière principale",
+          "blocks": [
+            {
+              "type": "heading",
+              "settings": {
+                "text": "Bienvenue dans notre boutique",
+                "size": "xl"
+              }
+            },
+            {
+              "type": "text",
+              "settings": {
+                "text": "Commandez en ligne, payez par Mobile Money, recevez chez vous."
+              }
+            },
+            {
+              "type": "button",
+              "settings": {
+                "button_label": "Découvrir",
+                "button_link": "/catalogue",
+                "button_style": "solid"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "slideshow": {
+      "type": "slideshow",
+      "name": "Diaporama",
+      "category": "Mise en avant",
+      "settings": [
+        {
+          "type": "checkbox",
+          "id": "autoplay",
+          "label": "Défilement automatique",
+          "default": true
+        },
+        {
+          "type": "range",
+          "id": "speed",
+          "label": "Durée par diapositive",
+          "default": 5,
+          "min": 3,
+          "max": 10,
+          "unit": "s"
+        },
+        {
+          "type": "segmented",
+          "id": "height",
+          "label": "Hauteur",
+          "default": "large",
+          "options": [
+            {
+              "value": "medium",
+              "label": "Moyenne"
+            },
+            {
+              "value": "large",
+              "label": "Grande"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "type": "slide",
+          "name": "Diapositive",
+          "settings": [
+            {
+              "type": "image",
+              "id": "image",
+              "label": "Image"
+            },
+            {
+              "type": "text",
+              "id": "heading",
+              "label": "Titre",
+              "default": "Nouvelle collection"
+            },
+            {
+              "type": "text",
+              "id": "subheading",
+              "label": "Sous-titre",
+              "default": ""
+            },
+            {
+              "type": "text",
+              "id": "button_label",
+              "label": "Texte du bouton",
+              "default": "Voir",
+              "maxLength": 40
+            },
+            {
+              "type": "url",
+              "id": "button_link",
+              "label": "Lien du bouton",
+              "default": "/catalogue"
+            },
+            {
+              "type": "segmented",
+              "id": "button_style",
+              "label": "Style",
+              "default": "solid",
+              "options": [
+                {
+                  "value": "solid",
+                  "label": "Plein"
+                },
+                {
+                  "value": "secondary",
+                  "label": "Secondaire"
+                },
+                {
+                  "value": "outline",
+                  "label": "Contour"
+                },
+                {
+                  "value": "link",
+                  "label": "Lien"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "maxBlocks": 6,
+      "presets": [
+        {
+          "name": "Diaporama",
+          "blocks": [
+            {
+              "type": "slide"
+            },
+            {
+              "type": "slide"
+            }
+          ]
+        }
+      ]
+    },
+    "image-with-text": {
+      "type": "image-with-text",
+      "name": "Image avec texte",
+      "category": "Mise en avant",
+      "settings": [
+        {
+          "type": "image",
+          "id": "image",
+          "label": "Image"
+        },
+        {
+          "type": "segmented",
+          "id": "image_position",
+          "label": "Image",
+          "default": "left",
+          "options": [
+            {
+              "value": "left",
+              "label": "À gauche"
+            },
+            {
+              "value": "right",
+              "label": "À droite"
+            }
+          ]
+        },
+        {
+          "type": "segmented",
+          "id": "image_ratio",
+          "label": "Format",
+          "default": "portrait",
+          "options": [
+            {
+              "value": "square",
+              "label": "Carré"
+            },
+            {
+              "value": "portrait",
+              "label": "Portrait"
+            },
+            {
+              "value": "landscape",
+              "label": "Paysage"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "padding_top",
+          "label": "Marge haute",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "range",
+          "id": "padding_bottom",
+          "label": "Marge basse",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "segmented",
+          "id": "section_width",
+          "label": "Largeur de la section",
+          "default": "content",
+          "options": [
+            {
+              "value": "content",
+              "label": "Contenu"
+            },
+            {
+              "value": "full",
+              "label": "Pleine largeur"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "content_width",
+          "label": "Largeur du contenu (sans effet en pleine largeur)",
+          "default": "standard",
+          "options": [
+            {
+              "value": "narrow",
+              "label": "Étroit"
+            },
+            {
+              "value": "standard",
+              "label": "Standard"
+            },
+            {
+              "value": "wide",
+              "label": "Large"
+            }
+          ]
+        },
+        {
+          "type": "header",
+          "content": "Arrière-plan"
+        },
+        {
+          "type": "segmented",
+          "id": "bg_type",
+          "label": "Type de fond",
+          "default": "none",
+          "options": [
+            {
+              "value": "none",
+              "label": "Aucun"
+            },
+            {
+              "value": "image",
+              "label": "Image"
+            },
+            {
+              "value": "gradient",
+              "label": "Dégradé"
+            }
+          ]
+        },
+        {
+          "type": "image",
+          "id": "bg_image",
+          "label": "Image de fond",
+          "info": "Affichée en plein cadre (recadrage automatique). Ajoutez une superposition si le texte manque de lisibilité."
+        },
+        {
+          "type": "select",
+          "id": "bg_position",
+          "label": "Cadrage de l'image",
+          "default": "center",
+          "options": [
+            {
+              "value": "top",
+              "label": "Haut"
+            },
+            {
+              "value": "center",
+              "label": "Centre"
+            },
+            {
+              "value": "bottom",
+              "label": "Bas"
+            }
+          ]
+        },
+        {
+          "type": "checkbox",
+          "id": "bg_fixed",
+          "label": "Effet parallaxe léger",
+          "default": false,
+          "info": "L'image reste fixe au défilement. Ignoré pour les visiteurs qui réduisent les animations."
+        },
+        {
+          "type": "color",
+          "id": "bg_gradient_from",
+          "label": "Dégradé : couleur de départ",
+          "default": "#1f2937"
+        },
+        {
+          "type": "color",
+          "id": "bg_gradient_to",
+          "label": "Dégradé : couleur d'arrivée",
+          "default": "#111827"
+        },
+        {
+          "type": "range",
+          "id": "bg_gradient_angle",
+          "label": "Dégradé : angle",
+          "default": 135,
+          "min": 0,
+          "max": 360,
+          "step": 5,
+          "unit": "°"
+        },
+        {
+          "type": "color",
+          "id": "bg_overlay_color",
+          "label": "Superposition : couleur",
+          "default": "#000000"
+        },
+        {
+          "type": "range",
+          "id": "bg_overlay",
+          "label": "Superposition : intensité",
+          "default": 0,
+          "min": 0,
+          "max": 80,
+          "step": 5,
+          "unit": "%"
+        }
+      ],
+      "blocks": [
+        {
+          "type": "heading",
+          "name": "Titre",
+          "settings": [
+            {
+              "type": "text",
+              "id": "text",
+              "label": "Titre",
+              "default": "Titre",
+              "maxLength": 120
+            },
+            {
+              "type": "select",
+              "id": "size",
+              "label": "Taille",
+              "default": "lg",
+              "options": [
+                {
+                  "value": "md",
+                  "label": "Moyen"
+                },
+                {
+                  "value": "lg",
+                  "label": "Grand"
+                },
+                {
+                  "value": "xl",
+                  "label": "Très grand"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "name": "Texte",
+          "settings": [
+            {
+              "type": "richtext",
+              "id": "text",
+              "label": "Texte",
+              "default": ""
+            }
+          ]
+        },
+        {
+          "type": "button",
+          "name": "Bouton",
+          "limit": 2,
+          "settings": [
+            {
+              "type": "text",
+              "id": "button_label",
+              "label": "Texte du bouton",
+              "default": "Voir la boutique",
+              "maxLength": 40
+            },
+            {
+              "type": "url",
+              "id": "button_link",
+              "label": "Lien du bouton",
+              "default": "/catalogue"
+            },
+            {
+              "type": "segmented",
+              "id": "button_style",
+              "label": "Style",
+              "default": "solid",
+              "options": [
+                {
+                  "value": "solid",
+                  "label": "Plein"
+                },
+                {
+                  "value": "secondary",
+                  "label": "Secondaire"
+                },
+                {
+                  "value": "outline",
+                  "label": "Contour"
+                },
+                {
+                  "value": "link",
+                  "label": "Lien"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "maxBlocks": 6,
+      "presets": [
+        {
+          "name": "Image avec texte",
+          "blocks": [
+            {
+              "type": "heading",
+              "settings": {
+                "text": "Notre histoire"
+              }
+            },
+            {
+              "type": "text",
+              "settings": {
+                "text": "Racontez ce qui rend votre boutique unique."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "rich-text": {
+      "type": "rich-text",
+      "name": "Texte enrichi",
+      "category": "Texte",
+      "settings": [
+        {
+          "type": "segmented",
+          "id": "align",
+          "label": "Alignement",
+          "default": "left",
+          "options": [
+            {
+              "value": "left",
+              "label": "Gauche"
+            },
+            {
+              "value": "center",
+              "label": "Centre"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "padding_top",
+          "label": "Marge haute",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "range",
+          "id": "padding_bottom",
+          "label": "Marge basse",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "segmented",
+          "id": "section_width",
+          "label": "Largeur de la section",
+          "default": "content",
+          "options": [
+            {
+              "value": "content",
+              "label": "Contenu"
+            },
+            {
+              "value": "full",
+              "label": "Pleine largeur"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "content_width",
+          "label": "Largeur du contenu (sans effet en pleine largeur)",
+          "default": "standard",
+          "options": [
+            {
+              "value": "narrow",
+              "label": "Étroit"
+            },
+            {
+              "value": "standard",
+              "label": "Standard"
+            },
+            {
+              "value": "wide",
+              "label": "Large"
+            }
+          ]
+        },
+        {
+          "type": "header",
+          "content": "Arrière-plan"
+        },
+        {
+          "type": "segmented",
+          "id": "bg_type",
+          "label": "Type de fond",
+          "default": "none",
+          "options": [
+            {
+              "value": "none",
+              "label": "Aucun"
+            },
+            {
+              "value": "image",
+              "label": "Image"
+            },
+            {
+              "value": "gradient",
+              "label": "Dégradé"
+            }
+          ]
+        },
+        {
+          "type": "image",
+          "id": "bg_image",
+          "label": "Image de fond",
+          "info": "Affichée en plein cadre (recadrage automatique). Ajoutez une superposition si le texte manque de lisibilité."
+        },
+        {
+          "type": "select",
+          "id": "bg_position",
+          "label": "Cadrage de l'image",
+          "default": "center",
+          "options": [
+            {
+              "value": "top",
+              "label": "Haut"
+            },
+            {
+              "value": "center",
+              "label": "Centre"
+            },
+            {
+              "value": "bottom",
+              "label": "Bas"
+            }
+          ]
+        },
+        {
+          "type": "checkbox",
+          "id": "bg_fixed",
+          "label": "Effet parallaxe léger",
+          "default": false,
+          "info": "L'image reste fixe au défilement. Ignoré pour les visiteurs qui réduisent les animations."
+        },
+        {
+          "type": "color",
+          "id": "bg_gradient_from",
+          "label": "Dégradé : couleur de départ",
+          "default": "#1f2937"
+        },
+        {
+          "type": "color",
+          "id": "bg_gradient_to",
+          "label": "Dégradé : couleur d'arrivée",
+          "default": "#111827"
+        },
+        {
+          "type": "range",
+          "id": "bg_gradient_angle",
+          "label": "Dégradé : angle",
+          "default": 135,
+          "min": 0,
+          "max": 360,
+          "step": 5,
+          "unit": "°"
+        },
+        {
+          "type": "color",
+          "id": "bg_overlay_color",
+          "label": "Superposition : couleur",
+          "default": "#000000"
+        },
+        {
+          "type": "range",
+          "id": "bg_overlay",
+          "label": "Superposition : intensité",
+          "default": 0,
+          "min": 0,
+          "max": 80,
+          "step": 5,
+          "unit": "%"
+        }
+      ],
+      "blocks": [
+        {
+          "type": "heading",
+          "name": "Titre",
+          "settings": [
+            {
+              "type": "text",
+              "id": "text",
+              "label": "Titre",
+              "default": "Titre",
+              "maxLength": 120
+            },
+            {
+              "type": "select",
+              "id": "size",
+              "label": "Taille",
+              "default": "lg",
+              "options": [
+                {
+                  "value": "md",
+                  "label": "Moyen"
+                },
+                {
+                  "value": "lg",
+                  "label": "Grand"
+                },
+                {
+                  "value": "xl",
+                  "label": "Très grand"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "name": "Texte",
+          "settings": [
+            {
+              "type": "richtext",
+              "id": "text",
+              "label": "Texte",
+              "default": ""
+            }
+          ]
+        },
+        {
+          "type": "button",
+          "name": "Bouton",
+          "limit": 2,
+          "settings": [
+            {
+              "type": "text",
+              "id": "button_label",
+              "label": "Texte du bouton",
+              "default": "Voir la boutique",
+              "maxLength": 40
+            },
+            {
+              "type": "url",
+              "id": "button_link",
+              "label": "Lien du bouton",
+              "default": "/catalogue"
+            },
+            {
+              "type": "segmented",
+              "id": "button_style",
+              "label": "Style",
+              "default": "solid",
+              "options": [
+                {
+                  "value": "solid",
+                  "label": "Plein"
+                },
+                {
+                  "value": "secondary",
+                  "label": "Secondaire"
+                },
+                {
+                  "value": "outline",
+                  "label": "Contour"
+                },
+                {
+                  "value": "link",
+                  "label": "Lien"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "presets": [
+        {
+          "name": "Texte enrichi",
+          "blocks": [
+            {
+              "type": "heading",
+              "settings": {
+                "text": "Parlez de votre marque"
+              }
+            },
+            {
+              "type": "text",
+              "settings": {
+                "text": "Partagez vos valeurs, votre savoir-faire et vos engagements."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "featured-collection": {
+      "type": "featured-collection",
+      "name": "Collection en vedette",
+      "category": "Produits",
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Titre",
+          "default": "Nos coups de cœur",
+          "maxLength": 120
+        },
+        {
+          "type": "select",
+          "id": "heading_size",
+          "label": "Taille du titre",
+          "default": "md",
+          "options": [
+            {
+              "value": "sm",
+              "label": "Petit"
+            },
+            {
+              "value": "md",
+              "label": "Moyen"
+            },
+            {
+              "value": "lg",
+              "label": "Grand"
+            },
+            {
+              "value": "xl",
+              "label": "Très grand"
+            }
+          ]
+        },
+        {
+          "type": "collection",
+          "id": "collection",
+          "label": "Collection"
+        },
+        {
+          "type": "range",
+          "id": "limit",
+          "label": "Produits affichés",
+          "default": 8,
+          "min": 2,
+          "max": 24
+        },
+        {
+          "type": "segmented",
+          "id": "columns",
+          "label": "Colonnes (ordinateur)",
+          "default": "4",
+          "options": [
+            {
+              "value": "2",
+              "label": "2"
+            },
+            {
+              "value": "3",
+              "label": "3"
+            },
+            {
+              "value": "4",
+              "label": "4"
+            },
+            {
+              "value": "5",
+              "label": "5"
+            }
+          ]
+        },
+        {
+          "type": "segmented",
+          "id": "layout",
+          "label": "Affichage",
+          "default": "grid",
+          "options": [
+            {
+              "value": "grid",
+              "label": "Grille"
+            },
+            {
+              "value": "carousel",
+              "label": "Carrousel"
+            }
+          ]
+        },
+        {
+          "type": "checkbox",
+          "id": "show_view_all",
+          "label": "Bouton « Tout voir »",
+          "default": true
+        },
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "padding_top",
+          "label": "Marge haute",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "range",
+          "id": "padding_bottom",
+          "label": "Marge basse",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "segmented",
+          "id": "section_width",
+          "label": "Largeur de la section",
+          "default": "content",
+          "options": [
+            {
+              "value": "content",
+              "label": "Contenu"
+            },
+            {
+              "value": "full",
+              "label": "Pleine largeur"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "content_width",
+          "label": "Largeur du contenu (sans effet en pleine largeur)",
+          "default": "standard",
+          "options": [
+            {
+              "value": "narrow",
+              "label": "Étroit"
+            },
+            {
+              "value": "standard",
+              "label": "Standard"
+            },
+            {
+              "value": "wide",
+              "label": "Large"
+            }
+          ]
+        },
+        {
+          "type": "header",
+          "content": "Arrière-plan"
+        },
+        {
+          "type": "segmented",
+          "id": "bg_type",
+          "label": "Type de fond",
+          "default": "none",
+          "options": [
+            {
+              "value": "none",
+              "label": "Aucun"
+            },
+            {
+              "value": "image",
+              "label": "Image"
+            },
+            {
+              "value": "gradient",
+              "label": "Dégradé"
+            }
+          ]
+        },
+        {
+          "type": "image",
+          "id": "bg_image",
+          "label": "Image de fond",
+          "info": "Affichée en plein cadre (recadrage automatique). Ajoutez une superposition si le texte manque de lisibilité."
+        },
+        {
+          "type": "select",
+          "id": "bg_position",
+          "label": "Cadrage de l'image",
+          "default": "center",
+          "options": [
+            {
+              "value": "top",
+              "label": "Haut"
+            },
+            {
+              "value": "center",
+              "label": "Centre"
+            },
+            {
+              "value": "bottom",
+              "label": "Bas"
+            }
+          ]
+        },
+        {
+          "type": "checkbox",
+          "id": "bg_fixed",
+          "label": "Effet parallaxe léger",
+          "default": false,
+          "info": "L'image reste fixe au défilement. Ignoré pour les visiteurs qui réduisent les animations."
+        },
+        {
+          "type": "color",
+          "id": "bg_gradient_from",
+          "label": "Dégradé : couleur de départ",
+          "default": "#1f2937"
+        },
+        {
+          "type": "color",
+          "id": "bg_gradient_to",
+          "label": "Dégradé : couleur d'arrivée",
+          "default": "#111827"
+        },
+        {
+          "type": "range",
+          "id": "bg_gradient_angle",
+          "label": "Dégradé : angle",
+          "default": 135,
+          "min": 0,
+          "max": 360,
+          "step": 5,
+          "unit": "°"
+        },
+        {
+          "type": "color",
+          "id": "bg_overlay_color",
+          "label": "Superposition : couleur",
+          "default": "#000000"
+        },
+        {
+          "type": "range",
+          "id": "bg_overlay",
+          "label": "Superposition : intensité",
+          "default": 0,
+          "min": 0,
+          "max": 80,
+          "step": 5,
+          "unit": "%"
+        }
+      ],
+      "presets": [
+        {
+          "name": "Collection en vedette"
+        }
+      ]
+    },
+    "featured-product": {
+      "type": "featured-product",
+      "name": "Produit en vedette",
+      "category": "Produits",
+      "settings": [
+        {
+          "type": "product",
+          "id": "product",
+          "label": "Produit"
+        },
+        {
+          "type": "checkbox",
+          "id": "show_description",
+          "label": "Afficher la description",
+          "default": true
+        },
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "padding_top",
+          "label": "Marge haute",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "range",
+          "id": "padding_bottom",
+          "label": "Marge basse",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        }
+      ],
+      "presets": [
+        {
+          "name": "Produit en vedette"
+        }
+      ]
+    },
+    "collection-list": {
+      "type": "collection-list",
+      "name": "Liste de collections",
+      "category": "Produits",
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Titre",
+          "default": "Nos catégories",
+          "maxLength": 120
+        },
+        {
+          "type": "select",
+          "id": "heading_size",
+          "label": "Taille du titre",
+          "default": "md",
+          "options": [
+            {
+              "value": "sm",
+              "label": "Petit"
+            },
+            {
+              "value": "md",
+              "label": "Moyen"
+            },
+            {
+              "value": "lg",
+              "label": "Grand"
+            },
+            {
+              "value": "xl",
+              "label": "Très grand"
+            }
+          ]
+        },
+        {
+          "type": "segmented",
+          "id": "style",
+          "label": "Style",
+          "default": "tiles",
+          "options": [
+            {
+              "value": "tiles",
+              "label": "Tuiles photo"
+            },
+            {
+              "value": "chips",
+              "label": "Pastilles"
+            },
+            {
+              "value": "circles",
+              "label": "Cercles"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "padding_top",
+          "label": "Marge haute",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "range",
+          "id": "padding_bottom",
+          "label": "Marge basse",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        }
+      ],
+      "blocks": [
+        {
+          "type": "collection",
+          "name": "Collection",
+          "settings": [
+            {
+              "type": "collection",
+              "id": "collection",
+              "label": "Collection"
+            },
+            {
+              "type": "image",
+              "id": "image",
+              "label": "Image (sinon celle de la collection)"
+            }
+          ]
+        }
+      ],
+      "maxBlocks": 12,
+      "presets": [
+        {
+          "name": "Liste de collections",
+          "blocks": [
+            {
+              "type": "collection"
+            },
+            {
+              "type": "collection"
+            },
+            {
+              "type": "collection"
+            }
+          ]
+        }
+      ]
+    },
+    "product-grid": {
+      "type": "product-grid",
+      "name": "Tous les produits",
+      "category": "Produits",
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Titre",
+          "default": "Tous nos produits",
+          "maxLength": 120
+        },
+        {
+          "type": "select",
+          "id": "heading_size",
+          "label": "Taille du titre",
+          "default": "md",
+          "options": [
+            {
+              "value": "sm",
+              "label": "Petit"
+            },
+            {
+              "value": "md",
+              "label": "Moyen"
+            },
+            {
+              "value": "lg",
+              "label": "Grand"
+            },
+            {
+              "value": "xl",
+              "label": "Très grand"
+            }
+          ]
+        },
+        {
+          "type": "checkbox",
+          "id": "show_filters",
+          "label": "Filtres et tri",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "show_search",
+          "label": "Recherche",
+          "default": true
+        },
+        {
+          "type": "range",
+          "id": "per_page",
+          "label": "Produits par page",
+          "default": 24,
+          "min": 8,
+          "max": 60,
+          "step": 4
+        },
+        {
+          "type": "segmented",
+          "id": "columns",
+          "label": "Colonnes",
+          "default": "4",
+          "options": [
+            {
+              "value": "2",
+              "label": "2"
+            },
+            {
+              "value": "3",
+              "label": "3"
+            },
+            {
+              "value": "4",
+              "label": "4"
+            }
+          ]
+        },
+        {
+          "type": "segmented",
+          "id": "layout",
+          "label": "Affichage",
+          "default": "grid",
+          "options": [
+            {
+              "value": "grid",
+              "label": "Grille"
+            },
+            {
+              "value": "list",
+              "label": "Liste (menu)"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "padding_top",
+          "label": "Marge haute",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "range",
+          "id": "padding_bottom",
+          "label": "Marge basse",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        }
+      ],
+      "presets": [
+        {
+          "name": "Tous les produits"
+        }
+      ]
+    },
+    "multicolumn": {
+      "type": "multicolumn",
+      "name": "Colonnes",
+      "category": "Texte",
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Titre",
+          "default": "Pourquoi nous choisir",
+          "maxLength": 120
+        },
+        {
+          "type": "select",
+          "id": "heading_size",
+          "label": "Taille du titre",
+          "default": "md",
+          "options": [
+            {
+              "value": "sm",
+              "label": "Petit"
+            },
+            {
+              "value": "md",
+              "label": "Moyen"
+            },
+            {
+              "value": "lg",
+              "label": "Grand"
+            },
+            {
+              "value": "xl",
+              "label": "Très grand"
+            }
+          ]
+        },
+        {
+          "type": "segmented",
+          "id": "columns",
+          "label": "Colonnes",
+          "default": "3",
+          "options": [
+            {
+              "value": "2",
+              "label": "2"
+            },
+            {
+              "value": "3",
+              "label": "3"
+            },
+            {
+              "value": "4",
+              "label": "4"
+            }
+          ]
+        },
+        {
+          "type": "segmented",
+          "id": "align",
+          "label": "Alignement",
+          "default": "left",
+          "options": [
+            {
+              "value": "left",
+              "label": "Gauche"
+            },
+            {
+              "value": "center",
+              "label": "Centre"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "padding_top",
+          "label": "Marge haute",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "range",
+          "id": "padding_bottom",
+          "label": "Marge basse",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "segmented",
+          "id": "section_width",
+          "label": "Largeur de la section",
+          "default": "content",
+          "options": [
+            {
+              "value": "content",
+              "label": "Contenu"
+            },
+            {
+              "value": "full",
+              "label": "Pleine largeur"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "content_width",
+          "label": "Largeur du contenu (sans effet en pleine largeur)",
+          "default": "standard",
+          "options": [
+            {
+              "value": "narrow",
+              "label": "Étroit"
+            },
+            {
+              "value": "standard",
+              "label": "Standard"
+            },
+            {
+              "value": "wide",
+              "label": "Large"
+            }
+          ]
+        },
+        {
+          "type": "header",
+          "content": "Arrière-plan"
+        },
+        {
+          "type": "segmented",
+          "id": "bg_type",
+          "label": "Type de fond",
+          "default": "none",
+          "options": [
+            {
+              "value": "none",
+              "label": "Aucun"
+            },
+            {
+              "value": "image",
+              "label": "Image"
+            },
+            {
+              "value": "gradient",
+              "label": "Dégradé"
+            }
+          ]
+        },
+        {
+          "type": "image",
+          "id": "bg_image",
+          "label": "Image de fond",
+          "info": "Affichée en plein cadre (recadrage automatique). Ajoutez une superposition si le texte manque de lisibilité."
+        },
+        {
+          "type": "select",
+          "id": "bg_position",
+          "label": "Cadrage de l'image",
+          "default": "center",
+          "options": [
+            {
+              "value": "top",
+              "label": "Haut"
+            },
+            {
+              "value": "center",
+              "label": "Centre"
+            },
+            {
+              "value": "bottom",
+              "label": "Bas"
+            }
+          ]
+        },
+        {
+          "type": "checkbox",
+          "id": "bg_fixed",
+          "label": "Effet parallaxe léger",
+          "default": false,
+          "info": "L'image reste fixe au défilement. Ignoré pour les visiteurs qui réduisent les animations."
+        },
+        {
+          "type": "color",
+          "id": "bg_gradient_from",
+          "label": "Dégradé : couleur de départ",
+          "default": "#1f2937"
+        },
+        {
+          "type": "color",
+          "id": "bg_gradient_to",
+          "label": "Dégradé : couleur d'arrivée",
+          "default": "#111827"
+        },
+        {
+          "type": "range",
+          "id": "bg_gradient_angle",
+          "label": "Dégradé : angle",
+          "default": 135,
+          "min": 0,
+          "max": 360,
+          "step": 5,
+          "unit": "°"
+        },
+        {
+          "type": "color",
+          "id": "bg_overlay_color",
+          "label": "Superposition : couleur",
+          "default": "#000000"
+        },
+        {
+          "type": "range",
+          "id": "bg_overlay",
+          "label": "Superposition : intensité",
+          "default": 0,
+          "min": 0,
+          "max": 80,
+          "step": 5,
+          "unit": "%"
+        }
+      ],
+      "blocks": [
+        {
+          "type": "column",
+          "name": "Colonne",
+          "settings": [
+            {
+              "type": "image",
+              "id": "image",
+              "label": "Image ou icône"
+            },
+            {
+              "type": "text",
+              "id": "title",
+              "label": "Titre",
+              "default": "Livraison rapide"
+            },
+            {
+              "type": "richtext",
+              "id": "text",
+              "label": "Texte",
+              "default": "En 24 h à Cotonou."
+            },
+            {
+              "type": "url",
+              "id": "link",
+              "label": "Lien"
+            }
+          ]
+        }
+      ],
+      "maxBlocks": 8,
+      "presets": [
+        {
+          "name": "Colonnes",
+          "blocks": [
+            {
+              "type": "column"
+            },
+            {
+              "type": "column",
+              "settings": {
+                "title": "Paiement Mobile Money",
+                "text": "MTN, Moov, Wave…"
+              }
+            },
+            {
+              "type": "column",
+              "settings": {
+                "title": "Service sur WhatsApp",
+                "text": "Une question ? Écrivez-nous."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "image-gallery": {
+      "type": "image-gallery",
+      "name": "Galerie d'images",
+      "category": "Médias",
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Titre",
+          "default": "",
+          "maxLength": 120
+        },
+        {
+          "type": "select",
+          "id": "heading_size",
+          "label": "Taille du titre",
+          "default": "md",
+          "options": [
+            {
+              "value": "sm",
+              "label": "Petit"
+            },
+            {
+              "value": "md",
+              "label": "Moyen"
+            },
+            {
+              "value": "lg",
+              "label": "Grand"
+            },
+            {
+              "value": "xl",
+              "label": "Très grand"
+            }
+          ]
+        },
+        {
+          "type": "segmented",
+          "id": "layout",
+          "label": "Disposition",
+          "default": "grid",
+          "options": [
+            {
+              "value": "grid",
+              "label": "Grille"
+            },
+            {
+              "value": "masonry",
+              "label": "Mosaïque"
+            },
+            {
+              "value": "carousel",
+              "label": "Carrousel"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "padding_top",
+          "label": "Marge haute",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "range",
+          "id": "padding_bottom",
+          "label": "Marge basse",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "segmented",
+          "id": "section_width",
+          "label": "Largeur de la section",
+          "default": "content",
+          "options": [
+            {
+              "value": "content",
+              "label": "Contenu"
+            },
+            {
+              "value": "full",
+              "label": "Pleine largeur"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "content_width",
+          "label": "Largeur du contenu (sans effet en pleine largeur)",
+          "default": "standard",
+          "options": [
+            {
+              "value": "narrow",
+              "label": "Étroit"
+            },
+            {
+              "value": "standard",
+              "label": "Standard"
+            },
+            {
+              "value": "wide",
+              "label": "Large"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "type": "image",
+          "name": "Image",
+          "settings": [
+            {
+              "type": "image",
+              "id": "image",
+              "label": "Image"
+            },
+            {
+              "type": "text",
+              "id": "caption",
+              "label": "Légende"
+            },
+            {
+              "type": "url",
+              "id": "link",
+              "label": "Lien"
+            }
+          ]
+        }
+      ],
+      "maxBlocks": 12,
+      "presets": [
+        {
+          "name": "Galerie d'images",
+          "blocks": [
+            {
+              "type": "image"
+            },
+            {
+              "type": "image"
+            },
+            {
+              "type": "image"
+            }
+          ]
+        }
+      ]
+    },
+    "video": {
+      "type": "video",
+      "name": "Vidéo",
+      "category": "Médias",
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Titre",
+          "default": "",
+          "maxLength": 120
+        },
+        {
+          "type": "select",
+          "id": "heading_size",
+          "label": "Taille du titre",
+          "default": "md",
+          "options": [
+            {
+              "value": "sm",
+              "label": "Petit"
+            },
+            {
+              "value": "md",
+              "label": "Moyen"
+            },
+            {
+              "value": "lg",
+              "label": "Grand"
+            },
+            {
+              "value": "xl",
+              "label": "Très grand"
+            }
+          ]
+        },
+        {
+          "type": "video",
+          "id": "url",
+          "label": "Lien de la vidéo",
+          "info": "YouTube, Vimeo ou fichier MP4 en https."
+        },
+        {
+          "type": "image",
+          "id": "cover",
+          "label": "Image de couverture"
+        },
+        {
+          "type": "checkbox",
+          "id": "autoplay",
+          "label": "Lecture automatique (muette)",
+          "default": false
+        },
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "padding_top",
+          "label": "Marge haute",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "range",
+          "id": "padding_bottom",
+          "label": "Marge basse",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        }
+      ],
+      "presets": [
+        {
+          "name": "Vidéo"
+        }
+      ]
+    },
+    "testimonials": {
+      "type": "testimonials",
+      "name": "Témoignages",
+      "category": "Confiance",
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Titre",
+          "default": "Ils nous font confiance",
+          "maxLength": 120
+        },
+        {
+          "type": "select",
+          "id": "heading_size",
+          "label": "Taille du titre",
+          "default": "md",
+          "options": [
+            {
+              "value": "sm",
+              "label": "Petit"
+            },
+            {
+              "value": "md",
+              "label": "Moyen"
+            },
+            {
+              "value": "lg",
+              "label": "Grand"
+            },
+            {
+              "value": "xl",
+              "label": "Très grand"
+            }
+          ]
+        },
+        {
+          "type": "segmented",
+          "id": "layout",
+          "label": "Affichage",
+          "default": "carousel",
+          "options": [
+            {
+              "value": "grid",
+              "label": "Grille"
+            },
+            {
+              "value": "carousel",
+              "label": "Carrousel"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "padding_top",
+          "label": "Marge haute",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "range",
+          "id": "padding_bottom",
+          "label": "Marge basse",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "segmented",
+          "id": "section_width",
+          "label": "Largeur de la section",
+          "default": "content",
+          "options": [
+            {
+              "value": "content",
+              "label": "Contenu"
+            },
+            {
+              "value": "full",
+              "label": "Pleine largeur"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "content_width",
+          "label": "Largeur du contenu (sans effet en pleine largeur)",
+          "default": "standard",
+          "options": [
+            {
+              "value": "narrow",
+              "label": "Étroit"
+            },
+            {
+              "value": "standard",
+              "label": "Standard"
+            },
+            {
+              "value": "wide",
+              "label": "Large"
+            }
+          ]
+        },
+        {
+          "type": "header",
+          "content": "Arrière-plan"
+        },
+        {
+          "type": "segmented",
+          "id": "bg_type",
+          "label": "Type de fond",
+          "default": "none",
+          "options": [
+            {
+              "value": "none",
+              "label": "Aucun"
+            },
+            {
+              "value": "image",
+              "label": "Image"
+            },
+            {
+              "value": "gradient",
+              "label": "Dégradé"
+            }
+          ]
+        },
+        {
+          "type": "image",
+          "id": "bg_image",
+          "label": "Image de fond",
+          "info": "Affichée en plein cadre (recadrage automatique). Ajoutez une superposition si le texte manque de lisibilité."
+        },
+        {
+          "type": "select",
+          "id": "bg_position",
+          "label": "Cadrage de l'image",
+          "default": "center",
+          "options": [
+            {
+              "value": "top",
+              "label": "Haut"
+            },
+            {
+              "value": "center",
+              "label": "Centre"
+            },
+            {
+              "value": "bottom",
+              "label": "Bas"
+            }
+          ]
+        },
+        {
+          "type": "checkbox",
+          "id": "bg_fixed",
+          "label": "Effet parallaxe léger",
+          "default": false,
+          "info": "L'image reste fixe au défilement. Ignoré pour les visiteurs qui réduisent les animations."
+        },
+        {
+          "type": "color",
+          "id": "bg_gradient_from",
+          "label": "Dégradé : couleur de départ",
+          "default": "#1f2937"
+        },
+        {
+          "type": "color",
+          "id": "bg_gradient_to",
+          "label": "Dégradé : couleur d'arrivée",
+          "default": "#111827"
+        },
+        {
+          "type": "range",
+          "id": "bg_gradient_angle",
+          "label": "Dégradé : angle",
+          "default": 135,
+          "min": 0,
+          "max": 360,
+          "step": 5,
+          "unit": "°"
+        },
+        {
+          "type": "color",
+          "id": "bg_overlay_color",
+          "label": "Superposition : couleur",
+          "default": "#000000"
+        },
+        {
+          "type": "range",
+          "id": "bg_overlay",
+          "label": "Superposition : intensité",
+          "default": 0,
+          "min": 0,
+          "max": 80,
+          "step": 5,
+          "unit": "%"
+        }
+      ],
+      "blocks": [
+        {
+          "type": "testimonial",
+          "name": "Témoignage",
+          "settings": [
+            {
+              "type": "textarea",
+              "id": "quote",
+              "label": "Citation",
+              "default": "",
+              "maxLength": 280
+            },
+            {
+              "type": "text",
+              "id": "author",
+              "label": "Nom",
+              "default": ""
+            },
+            {
+              "type": "text",
+              "id": "role",
+              "label": "Ville ou précision",
+              "default": ""
+            },
+            {
+              "type": "image",
+              "id": "avatar",
+              "label": "Photo"
+            },
+            {
+              "type": "range",
+              "id": "rating",
+              "label": "Note",
+              "default": 5,
+              "min": 1,
+              "max": 5
+            }
+          ]
+        }
+      ],
+      "maxBlocks": 12,
+      "presets": [
+        {
+          "name": "Témoignages",
+          "blocks": [
+            {
+              "type": "testimonial"
+            },
+            {
+              "type": "testimonial"
+            },
+            {
+              "type": "testimonial"
+            }
+          ]
+        }
+      ]
+    },
+    "reviews": {
+      "type": "reviews",
+      "name": "Avis clients vérifiés",
+      "category": "Confiance",
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Titre",
+          "default": "Avis de nos clients",
+          "maxLength": 120
+        },
+        {
+          "type": "select",
+          "id": "heading_size",
+          "label": "Taille du titre",
+          "default": "md",
+          "options": [
+            {
+              "value": "sm",
+              "label": "Petit"
+            },
+            {
+              "value": "md",
+              "label": "Moyen"
+            },
+            {
+              "value": "lg",
+              "label": "Grand"
+            },
+            {
+              "value": "xl",
+              "label": "Très grand"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "limit",
+          "label": "Avis affichés",
+          "default": 6,
+          "min": 3,
+          "max": 24
+        },
+        {
+          "type": "checkbox",
+          "id": "show_summary",
+          "label": "Note moyenne et répartition",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "show_product",
+          "label": "Afficher le produit concerné",
+          "default": true
+        },
+        {
+          "type": "segmented",
+          "id": "layout",
+          "label": "Affichage",
+          "default": "carousel",
+          "options": [
+            {
+              "value": "grid",
+              "label": "Grille"
+            },
+            {
+              "value": "carousel",
+              "label": "Carrousel"
+            },
+            {
+              "value": "list",
+              "label": "Liste"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "padding_top",
+          "label": "Marge haute",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "range",
+          "id": "padding_bottom",
+          "label": "Marge basse",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        }
+      ],
+      "presets": [
+        {
+          "name": "Avis clients vérifiés"
+        }
+      ]
+    },
+    "faq": {
+      "type": "faq",
+      "name": "Questions fréquentes",
+      "category": "Texte",
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Titre",
+          "default": "Questions fréquentes",
+          "maxLength": 120
+        },
+        {
+          "type": "select",
+          "id": "heading_size",
+          "label": "Taille du titre",
+          "default": "md",
+          "options": [
+            {
+              "value": "sm",
+              "label": "Petit"
+            },
+            {
+              "value": "md",
+              "label": "Moyen"
+            },
+            {
+              "value": "lg",
+              "label": "Grand"
+            },
+            {
+              "value": "xl",
+              "label": "Très grand"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "padding_top",
+          "label": "Marge haute",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "range",
+          "id": "padding_bottom",
+          "label": "Marge basse",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "segmented",
+          "id": "section_width",
+          "label": "Largeur de la section",
+          "default": "content",
+          "options": [
+            {
+              "value": "content",
+              "label": "Contenu"
+            },
+            {
+              "value": "full",
+              "label": "Pleine largeur"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "content_width",
+          "label": "Largeur du contenu (sans effet en pleine largeur)",
+          "default": "standard",
+          "options": [
+            {
+              "value": "narrow",
+              "label": "Étroit"
+            },
+            {
+              "value": "standard",
+              "label": "Standard"
+            },
+            {
+              "value": "wide",
+              "label": "Large"
+            }
+          ]
+        },
+        {
+          "type": "header",
+          "content": "Arrière-plan"
+        },
+        {
+          "type": "segmented",
+          "id": "bg_type",
+          "label": "Type de fond",
+          "default": "none",
+          "options": [
+            {
+              "value": "none",
+              "label": "Aucun"
+            },
+            {
+              "value": "image",
+              "label": "Image"
+            },
+            {
+              "value": "gradient",
+              "label": "Dégradé"
+            }
+          ]
+        },
+        {
+          "type": "image",
+          "id": "bg_image",
+          "label": "Image de fond",
+          "info": "Affichée en plein cadre (recadrage automatique). Ajoutez une superposition si le texte manque de lisibilité."
+        },
+        {
+          "type": "select",
+          "id": "bg_position",
+          "label": "Cadrage de l'image",
+          "default": "center",
+          "options": [
+            {
+              "value": "top",
+              "label": "Haut"
+            },
+            {
+              "value": "center",
+              "label": "Centre"
+            },
+            {
+              "value": "bottom",
+              "label": "Bas"
+            }
+          ]
+        },
+        {
+          "type": "checkbox",
+          "id": "bg_fixed",
+          "label": "Effet parallaxe léger",
+          "default": false,
+          "info": "L'image reste fixe au défilement. Ignoré pour les visiteurs qui réduisent les animations."
+        },
+        {
+          "type": "color",
+          "id": "bg_gradient_from",
+          "label": "Dégradé : couleur de départ",
+          "default": "#1f2937"
+        },
+        {
+          "type": "color",
+          "id": "bg_gradient_to",
+          "label": "Dégradé : couleur d'arrivée",
+          "default": "#111827"
+        },
+        {
+          "type": "range",
+          "id": "bg_gradient_angle",
+          "label": "Dégradé : angle",
+          "default": 135,
+          "min": 0,
+          "max": 360,
+          "step": 5,
+          "unit": "°"
+        },
+        {
+          "type": "color",
+          "id": "bg_overlay_color",
+          "label": "Superposition : couleur",
+          "default": "#000000"
+        },
+        {
+          "type": "range",
+          "id": "bg_overlay",
+          "label": "Superposition : intensité",
+          "default": 0,
+          "min": 0,
+          "max": 80,
+          "step": 5,
+          "unit": "%"
+        }
+      ],
+      "blocks": [
+        {
+          "type": "question",
+          "name": "Question",
+          "settings": [
+            {
+              "type": "text",
+              "id": "question",
+              "label": "Question",
+              "default": "Livrez-vous partout ?"
+            },
+            {
+              "type": "richtext",
+              "id": "answer",
+              "label": "Réponse",
+              "default": "Oui, dans toute la ville. Les frais s'affichent au moment de commander."
+            }
+          ]
+        }
+      ],
+      "maxBlocks": 20,
+      "presets": [
+        {
+          "name": "Questions fréquentes",
+          "blocks": [
+            {
+              "type": "question"
+            },
+            {
+              "type": "question",
+              "settings": {
+                "question": "Comment payer ?",
+                "answer": "Mobile Money, carte ou espèces à la livraison."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "newsletter": {
+      "type": "newsletter",
+      "name": "Inscription aux nouveautés",
+      "category": "Contact",
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Titre",
+          "default": "Restez informé",
+          "maxLength": 120
+        },
+        {
+          "type": "select",
+          "id": "heading_size",
+          "label": "Taille du titre",
+          "default": "md",
+          "options": [
+            {
+              "value": "sm",
+              "label": "Petit"
+            },
+            {
+              "value": "md",
+              "label": "Moyen"
+            },
+            {
+              "value": "lg",
+              "label": "Grand"
+            },
+            {
+              "value": "xl",
+              "label": "Très grand"
+            }
+          ]
+        },
+        {
+          "type": "textarea",
+          "id": "text",
+          "label": "Texte",
+          "default": "Recevez nos nouveautés et promotions."
+        },
+        {
+          "type": "segmented",
+          "id": "channel",
+          "label": "Canal",
+          "default": "whatsapp",
+          "options": [
+            {
+              "value": "whatsapp",
+              "label": "WhatsApp"
+            },
+            {
+              "value": "email",
+              "label": "E-mail"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "padding_top",
+          "label": "Marge haute",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "range",
+          "id": "padding_bottom",
+          "label": "Marge basse",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "segmented",
+          "id": "section_width",
+          "label": "Largeur de la section",
+          "default": "content",
+          "options": [
+            {
+              "value": "content",
+              "label": "Contenu"
+            },
+            {
+              "value": "full",
+              "label": "Pleine largeur"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "content_width",
+          "label": "Largeur du contenu (sans effet en pleine largeur)",
+          "default": "standard",
+          "options": [
+            {
+              "value": "narrow",
+              "label": "Étroit"
+            },
+            {
+              "value": "standard",
+              "label": "Standard"
+            },
+            {
+              "value": "wide",
+              "label": "Large"
+            }
+          ]
+        },
+        {
+          "type": "header",
+          "content": "Arrière-plan"
+        },
+        {
+          "type": "segmented",
+          "id": "bg_type",
+          "label": "Type de fond",
+          "default": "none",
+          "options": [
+            {
+              "value": "none",
+              "label": "Aucun"
+            },
+            {
+              "value": "image",
+              "label": "Image"
+            },
+            {
+              "value": "gradient",
+              "label": "Dégradé"
+            }
+          ]
+        },
+        {
+          "type": "image",
+          "id": "bg_image",
+          "label": "Image de fond",
+          "info": "Affichée en plein cadre (recadrage automatique). Ajoutez une superposition si le texte manque de lisibilité."
+        },
+        {
+          "type": "select",
+          "id": "bg_position",
+          "label": "Cadrage de l'image",
+          "default": "center",
+          "options": [
+            {
+              "value": "top",
+              "label": "Haut"
+            },
+            {
+              "value": "center",
+              "label": "Centre"
+            },
+            {
+              "value": "bottom",
+              "label": "Bas"
+            }
+          ]
+        },
+        {
+          "type": "checkbox",
+          "id": "bg_fixed",
+          "label": "Effet parallaxe léger",
+          "default": false,
+          "info": "L'image reste fixe au défilement. Ignoré pour les visiteurs qui réduisent les animations."
+        },
+        {
+          "type": "color",
+          "id": "bg_gradient_from",
+          "label": "Dégradé : couleur de départ",
+          "default": "#1f2937"
+        },
+        {
+          "type": "color",
+          "id": "bg_gradient_to",
+          "label": "Dégradé : couleur d'arrivée",
+          "default": "#111827"
+        },
+        {
+          "type": "range",
+          "id": "bg_gradient_angle",
+          "label": "Dégradé : angle",
+          "default": 135,
+          "min": 0,
+          "max": 360,
+          "step": 5,
+          "unit": "°"
+        },
+        {
+          "type": "color",
+          "id": "bg_overlay_color",
+          "label": "Superposition : couleur",
+          "default": "#000000"
+        },
+        {
+          "type": "range",
+          "id": "bg_overlay",
+          "label": "Superposition : intensité",
+          "default": 0,
+          "min": 0,
+          "max": 80,
+          "step": 5,
+          "unit": "%"
+        }
+      ],
+      "presets": [
+        {
+          "name": "Inscription aux nouveautés"
+        }
+      ]
+    },
+    "whatsapp-cta": {
+      "type": "whatsapp-cta",
+      "name": "Appel WhatsApp",
+      "category": "Contact",
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Titre",
+          "default": "Une question ? Écrivez-nous",
+          "maxLength": 120
+        },
+        {
+          "type": "select",
+          "id": "heading_size",
+          "label": "Taille du titre",
+          "default": "md",
+          "options": [
+            {
+              "value": "sm",
+              "label": "Petit"
+            },
+            {
+              "value": "md",
+              "label": "Moyen"
+            },
+            {
+              "value": "lg",
+              "label": "Grand"
+            },
+            {
+              "value": "xl",
+              "label": "Très grand"
+            }
+          ]
+        },
+        {
+          "type": "textarea",
+          "id": "text",
+          "label": "Texte",
+          "default": "Réponse rapide sur WhatsApp, du lundi au samedi."
+        },
+        {
+          "type": "text",
+          "id": "prefill",
+          "label": "Message prérempli",
+          "default": "Bonjour, j'ai une question."
+        },
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "padding_top",
+          "label": "Marge haute",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "range",
+          "id": "padding_bottom",
+          "label": "Marge basse",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "segmented",
+          "id": "section_width",
+          "label": "Largeur de la section",
+          "default": "content",
+          "options": [
+            {
+              "value": "content",
+              "label": "Contenu"
+            },
+            {
+              "value": "full",
+              "label": "Pleine largeur"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "content_width",
+          "label": "Largeur du contenu (sans effet en pleine largeur)",
+          "default": "standard",
+          "options": [
+            {
+              "value": "narrow",
+              "label": "Étroit"
+            },
+            {
+              "value": "standard",
+              "label": "Standard"
+            },
+            {
+              "value": "wide",
+              "label": "Large"
+            }
+          ]
+        },
+        {
+          "type": "header",
+          "content": "Arrière-plan"
+        },
+        {
+          "type": "segmented",
+          "id": "bg_type",
+          "label": "Type de fond",
+          "default": "none",
+          "options": [
+            {
+              "value": "none",
+              "label": "Aucun"
+            },
+            {
+              "value": "image",
+              "label": "Image"
+            },
+            {
+              "value": "gradient",
+              "label": "Dégradé"
+            }
+          ]
+        },
+        {
+          "type": "image",
+          "id": "bg_image",
+          "label": "Image de fond",
+          "info": "Affichée en plein cadre (recadrage automatique). Ajoutez une superposition si le texte manque de lisibilité."
+        },
+        {
+          "type": "select",
+          "id": "bg_position",
+          "label": "Cadrage de l'image",
+          "default": "center",
+          "options": [
+            {
+              "value": "top",
+              "label": "Haut"
+            },
+            {
+              "value": "center",
+              "label": "Centre"
+            },
+            {
+              "value": "bottom",
+              "label": "Bas"
+            }
+          ]
+        },
+        {
+          "type": "checkbox",
+          "id": "bg_fixed",
+          "label": "Effet parallaxe léger",
+          "default": false,
+          "info": "L'image reste fixe au défilement. Ignoré pour les visiteurs qui réduisent les animations."
+        },
+        {
+          "type": "color",
+          "id": "bg_gradient_from",
+          "label": "Dégradé : couleur de départ",
+          "default": "#1f2937"
+        },
+        {
+          "type": "color",
+          "id": "bg_gradient_to",
+          "label": "Dégradé : couleur d'arrivée",
+          "default": "#111827"
+        },
+        {
+          "type": "range",
+          "id": "bg_gradient_angle",
+          "label": "Dégradé : angle",
+          "default": 135,
+          "min": 0,
+          "max": 360,
+          "step": 5,
+          "unit": "°"
+        },
+        {
+          "type": "color",
+          "id": "bg_overlay_color",
+          "label": "Superposition : couleur",
+          "default": "#000000"
+        },
+        {
+          "type": "range",
+          "id": "bg_overlay",
+          "label": "Superposition : intensité",
+          "default": 0,
+          "min": 0,
+          "max": 80,
+          "step": 5,
+          "unit": "%"
+        }
+      ],
+      "presets": [
+        {
+          "name": "Appel WhatsApp",
+          "settings": {
+            "scheme": "brand"
+          }
+        }
+      ]
+    },
+    "contact": {
+      "type": "contact",
+      "name": "Contact et adresse",
+      "category": "Contact",
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Titre",
+          "default": "Nous trouver",
+          "maxLength": 120
+        },
+        {
+          "type": "select",
+          "id": "heading_size",
+          "label": "Taille du titre",
+          "default": "md",
+          "options": [
+            {
+              "value": "sm",
+              "label": "Petit"
+            },
+            {
+              "value": "md",
+              "label": "Moyen"
+            },
+            {
+              "value": "lg",
+              "label": "Grand"
+            },
+            {
+              "value": "xl",
+              "label": "Très grand"
+            }
+          ]
+        },
+        {
+          "type": "checkbox",
+          "id": "show_map_link",
+          "label": "Lien itinéraire",
+          "default": true
+        },
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "padding_top",
+          "label": "Marge haute",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "range",
+          "id": "padding_bottom",
+          "label": "Marge basse",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        }
+      ],
+      "presets": [
+        {
+          "name": "Contact et adresse"
+        }
+      ]
+    },
+    "opening-hours": {
+      "type": "opening-hours",
+      "name": "Horaires",
+      "category": "Contact",
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Titre",
+          "default": "Horaires d'ouverture",
+          "maxLength": 120
+        },
+        {
+          "type": "select",
+          "id": "heading_size",
+          "label": "Taille du titre",
+          "default": "md",
+          "options": [
+            {
+              "value": "sm",
+              "label": "Petit"
+            },
+            {
+              "value": "md",
+              "label": "Moyen"
+            },
+            {
+              "value": "lg",
+              "label": "Grand"
+            },
+            {
+              "value": "xl",
+              "label": "Très grand"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "padding_top",
+          "label": "Marge haute",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "range",
+          "id": "padding_bottom",
+          "label": "Marge basse",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        }
+      ],
+      "presets": [
+        {
+          "name": "Horaires"
+        }
+      ]
+    },
+    "map": {
+      "type": "map",
+      "name": "Plan d'accès",
+      "category": "Contact",
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Titre",
+          "default": "Plan d'accès",
+          "maxLength": 120
+        },
+        {
+          "type": "select",
+          "id": "heading_size",
+          "label": "Taille du titre",
+          "default": "md",
+          "options": [
+            {
+              "value": "sm",
+              "label": "Petit"
+            },
+            {
+              "value": "md",
+              "label": "Moyen"
+            },
+            {
+              "value": "lg",
+              "label": "Grand"
+            },
+            {
+              "value": "xl",
+              "label": "Très grand"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "address",
+          "label": "Adresse ou repère",
+          "default": ""
+        },
+        {
+          "type": "image",
+          "id": "image",
+          "label": "Image du plan (optionnelle)"
+        },
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "padding_top",
+          "label": "Marge haute",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "range",
+          "id": "padding_bottom",
+          "label": "Marge basse",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        }
+      ],
+      "presets": [
+        {
+          "name": "Plan d'accès"
+        }
+      ]
+    },
+    "logo-list": {
+      "type": "logo-list",
+      "name": "Logos (marques, partenaires)",
+      "category": "Confiance",
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Titre",
+          "default": "Les marques que nous distribuons",
+          "maxLength": 120
+        },
+        {
+          "type": "select",
+          "id": "heading_size",
+          "label": "Taille du titre",
+          "default": "md",
+          "options": [
+            {
+              "value": "sm",
+              "label": "Petit"
+            },
+            {
+              "value": "md",
+              "label": "Moyen"
+            },
+            {
+              "value": "lg",
+              "label": "Grand"
+            },
+            {
+              "value": "xl",
+              "label": "Très grand"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "padding_top",
+          "label": "Marge haute",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "range",
+          "id": "padding_bottom",
+          "label": "Marge basse",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        }
+      ],
+      "blocks": [
+        {
+          "type": "logo",
+          "name": "Logo",
+          "settings": [
+            {
+              "type": "image",
+              "id": "image",
+              "label": "Logo"
+            },
+            {
+              "type": "url",
+              "id": "link",
+              "label": "Lien"
+            }
+          ]
+        }
+      ],
+      "maxBlocks": 16,
+      "presets": [
+        {
+          "name": "Logos",
+          "blocks": [
+            {
+              "type": "logo"
+            },
+            {
+              "type": "logo"
+            },
+            {
+              "type": "logo"
+            },
+            {
+              "type": "logo"
+            }
+          ]
+        }
+      ]
+    },
+    "countdown": {
+      "type": "countdown",
+      "name": "Compte à rebours",
+      "category": "Mise en avant",
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Titre",
+          "default": "Fin de la promotion dans",
+          "maxLength": 120
+        },
+        {
+          "type": "select",
+          "id": "heading_size",
+          "label": "Taille du titre",
+          "default": "md",
+          "options": [
+            {
+              "value": "sm",
+              "label": "Petit"
+            },
+            {
+              "value": "md",
+              "label": "Moyen"
+            },
+            {
+              "value": "lg",
+              "label": "Grand"
+            },
+            {
+              "value": "xl",
+              "label": "Très grand"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "ends_at",
+          "label": "Date de fin (AAAA-MM-JJ HH:MM)",
+          "default": ""
+        },
+        {
+          "type": "text",
+          "id": "button_label",
+          "label": "Texte du bouton",
+          "default": "J'en profite",
+          "maxLength": 40
+        },
+        {
+          "type": "url",
+          "id": "button_link",
+          "label": "Lien du bouton",
+          "default": "/catalogue"
+        },
+        {
+          "type": "segmented",
+          "id": "button_style",
+          "label": "Style",
+          "default": "solid",
+          "options": [
+            {
+              "value": "solid",
+              "label": "Plein"
+            },
+            {
+              "value": "secondary",
+              "label": "Secondaire"
+            },
+            {
+              "value": "outline",
+              "label": "Contour"
+            },
+            {
+              "value": "link",
+              "label": "Lien"
+            }
+          ]
+        },
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "padding_top",
+          "label": "Marge haute",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "range",
+          "id": "padding_bottom",
+          "label": "Marge basse",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        }
+      ],
+      "presets": [
+        {
+          "name": "Compte à rebours",
+          "settings": {
+            "scheme": "brand"
+          }
+        }
+      ]
+    },
+    "trust-badges": {
+      "type": "trust-badges",
+      "name": "Garanties",
+      "category": "Confiance",
+      "settings": [
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "padding_top",
+          "label": "Marge haute",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "range",
+          "id": "padding_bottom",
+          "label": "Marge basse",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        }
+      ],
+      "blocks": [
+        {
+          "type": "badge",
+          "name": "Garantie",
+          "settings": [
+            {
+              "type": "select",
+              "id": "icon",
+              "label": "Icône",
+              "default": "truck",
+              "options": [
+                {
+                  "value": "truck",
+                  "label": "Livraison"
+                },
+                {
+                  "value": "shield",
+                  "label": "Paiement sécurisé"
+                },
+                {
+                  "value": "refresh",
+                  "label": "Échange"
+                },
+                {
+                  "value": "chat",
+                  "label": "Service client"
+                },
+                {
+                  "value": "star",
+                  "label": "Qualité"
+                },
+                {
+                  "value": "clock",
+                  "label": "Rapidité"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "title",
+              "label": "Titre",
+              "default": "Livraison en 24 h"
+            },
+            {
+              "type": "text",
+              "id": "text",
+              "label": "Texte",
+              "default": ""
+            }
+          ]
+        }
+      ],
+      "maxBlocks": 6,
+      "presets": [
+        {
+          "name": "Garanties",
+          "blocks": [
+            {
+              "type": "badge"
+            },
+            {
+              "type": "badge",
+              "settings": {
+                "icon": "shield",
+                "title": "Paiement Mobile Money"
+              }
+            },
+            {
+              "type": "badge",
+              "settings": {
+                "icon": "chat",
+                "title": "Réponse sur WhatsApp"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "custom-spacer": {
+      "type": "custom-spacer",
+      "name": "Espacement",
+      "category": "Structure",
+      "settings": [
+        {
+          "type": "range",
+          "id": "height",
+          "label": "Hauteur",
+          "default": 48,
+          "min": 8,
+          "max": 200,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "checkbox",
+          "id": "divider",
+          "label": "Ligne de séparation",
+          "default": false
+        }
+      ],
+      "presets": [
+        {
+          "name": "Espacement"
+        }
+      ]
+    },
+    "main-product": {
+      "type": "main-product",
+      "name": "Fiche produit",
+      "category": "Modèle",
+      "templates": [
+        "product"
+      ],
+      "required": true,
+      "settings": [
+        {
+          "type": "select",
+          "id": "gallery",
+          "label": "Galerie",
+          "default": "thumbnails-left",
+          "options": [
+            {
+              "value": "thumbnails-left",
+              "label": "Vignettes à gauche"
+            },
+            {
+              "value": "thumbnails-bottom",
+              "label": "Vignettes en dessous"
+            },
+            {
+              "value": "carousel",
+              "label": "Carrousel"
+            },
+            {
+              "value": "stacked",
+              "label": "Images empilées"
+            },
+            {
+              "value": "grid-2",
+              "label": "Grille 2 colonnes"
+            }
+          ]
+        },
+        {
+          "type": "checkbox",
+          "id": "zoom",
+          "label": "Zoom sur l'image",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "sticky_info",
+          "label": "Infos collantes au défilement (ordinateur)",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "sticky_add_to_cart",
+          "label": "Bouton d'ajout collant (mobile)",
+          "default": true
+        },
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "type": "vendor",
+          "name": "Marque",
+          "limit": 1,
+          "settings": []
+        },
+        {
+          "type": "title",
+          "name": "Titre",
+          "limit": 1,
+          "settings": []
+        },
+        {
+          "type": "price",
+          "name": "Prix",
+          "limit": 1,
+          "settings": [
+            {
+              "type": "checkbox",
+              "id": "show_savings",
+              "label": "Afficher l'économie (-x %)",
+              "default": true
+            }
+          ]
+        },
+        {
+          "type": "rating",
+          "name": "Note moyenne",
+          "limit": 1,
+          "settings": []
+        },
+        {
+          "type": "variant_picker",
+          "name": "Variantes",
+          "limit": 1,
+          "settings": [
+            {
+              "type": "segmented",
+              "id": "style",
+              "label": "Style",
+              "default": "buttons",
+              "options": [
+                {
+                  "value": "buttons",
+                  "label": "Boutons"
+                },
+                {
+                  "value": "dropdown",
+                  "label": "Liste"
+                },
+                {
+                  "value": "swatches",
+                  "label": "Pastilles couleur"
+                }
+              ]
+            },
+            {
+              "type": "checkbox",
+              "id": "show_sold_out",
+              "label": "Montrer les variantes épuisées",
+              "default": true
+            }
+          ]
+        },
+        {
+          "type": "options",
+          "name": "Options et suppléments",
+          "limit": 1,
+          "settings": []
+        },
+        {
+          "type": "quantity",
+          "name": "Quantité",
+          "limit": 1,
+          "settings": []
+        },
+        {
+          "type": "buy_buttons",
+          "name": "Boutons d'achat",
+          "limit": 1,
+          "settings": [
+            {
+              "type": "checkbox",
+              "id": "show_whatsapp",
+              "label": "Bouton « Commander sur WhatsApp »",
+              "default": true
+            },
+            {
+              "type": "checkbox",
+              "id": "show_buy_now",
+              "label": "Bouton « Acheter maintenant »",
+              "default": true
+            }
+          ]
+        },
+        {
+          "type": "stock",
+          "name": "Disponibilité",
+          "limit": 1,
+          "settings": [
+            {
+              "type": "paragraph",
+              "content": "Le seuil « stock bas » se règle sur chaque produit (ou par défaut dans Notifications). Une rupture vendue en précommande s'affiche « Précommande »."
+            }
+          ]
+        },
+        {
+          "type": "description",
+          "name": "Description",
+          "limit": 1,
+          "settings": [
+            {
+              "type": "checkbox",
+              "id": "collapsed",
+              "label": "Repliée par défaut",
+              "default": false
+            }
+          ]
+        },
+        {
+          "type": "collapsible_tab",
+          "name": "Onglet repliable",
+          "settings": [
+            {
+              "type": "text",
+              "id": "title",
+              "label": "Titre",
+              "default": "Livraison et retours"
+            },
+            {
+              "type": "richtext",
+              "id": "content",
+              "label": "Contenu",
+              "default": ""
+            },
+            {
+              "type": "checkbox",
+              "id": "use_product_details",
+              "label": "Utiliser les détails du produit",
+              "default": false
+            }
+          ]
+        },
+        {
+          "type": "delivery_info",
+          "name": "Infos livraison",
+          "limit": 1,
+          "settings": []
+        },
+        {
+          "type": "trust",
+          "name": "Garanties",
+          "limit": 1,
+          "settings": []
+        },
+        {
+          "type": "share",
+          "name": "Partager",
+          "limit": 1,
+          "settings": []
+        },
+        {
+          "type": "sku",
+          "name": "Référence (SKU)",
+          "limit": 1,
+          "settings": []
+        },
+        {
+          "type": "text",
+          "name": "Texte libre",
+          "settings": [
+            {
+              "type": "richtext",
+              "id": "text",
+              "label": "Texte",
+              "default": ""
+            }
+          ]
+        },
+        {
+          "type": "metafield",
+          "name": "Champ personnalisé",
+          "settings": [
+            {
+              "type": "text",
+              "id": "label",
+              "label": "Libellé",
+              "default": "",
+              "maxLength": 60
+            },
+            {
+              "type": "textarea",
+              "id": "value",
+              "label": "Valeur",
+              "default": "",
+              "maxLength": 500,
+              "info": "Connectez un champ personnalisé (« Connecter une donnée »). Rien ne s'affiche si la valeur est vide."
+            }
+          ]
+        },
+        {
+          "type": "complementary",
+          "name": "Souvent achetés ensemble",
+          "limit": 1,
+          "settings": [
+            {
+              "type": "text",
+              "id": "heading",
+              "label": "Titre",
+              "default": "Souvent achetés ensemble",
+              "maxLength": 80
+            },
+            {
+              "type": "range",
+              "id": "max",
+              "label": "Produits affichés",
+              "default": 3,
+              "min": 1,
+              "max": 4
+            },
+            {
+              "type": "paragraph",
+              "content": "Produits proposés par vos offres au panier (Promotions, onglet « Offres au panier », emplacement « Fiche produit »). Masqué s'il n'y a aucune offre."
+            }
+          ]
+        },
+        {
+          "type": "gift_card_form",
+          "name": "Carte cadeau : destinataire",
+          "limit": 1,
+          "settings": [
+            {
+              "type": "paragraph",
+              "content": "Visible uniquement sur les produits « carte cadeau » : nom, téléphone ou e-mail du destinataire, message et date d'envoi."
+            }
+          ]
+        },
+        {
+          "type": "discount_badges",
+          "name": "Offres disponibles",
+          "limit": 1,
+          "settings": [
+            {
+              "type": "text",
+              "id": "heading",
+              "label": "Titre",
+              "default": "Offres disponibles",
+              "maxLength": 80
+            },
+            {
+              "type": "paragraph",
+              "content": "Remises automatiques actives qui concernent ce produit (lots, quantités, paliers)."
+            }
+          ]
+        }
+      ],
+      "presets": [
+        {
+          "name": "Fiche produit",
+          "blocks": [
+            {
+              "type": "vendor"
+            },
+            {
+              "type": "title"
+            },
+            {
+              "type": "rating"
+            },
+            {
+              "type": "price"
+            },
+            {
+              "type": "discount_badges"
+            },
+            {
+              "type": "variant_picker"
+            },
+            {
+              "type": "options"
+            },
+            {
+              "type": "stock"
+            },
+            {
+              "type": "quantity"
+            },
+            {
+              "type": "gift_card_form"
+            },
+            {
+              "type": "buy_buttons"
+            },
+            {
+              "type": "complementary"
+            },
+            {
+              "type": "delivery_info"
+            },
+            {
+              "type": "description"
+            },
+            {
+              "type": "collapsible_tab",
+              "settings": {
+                "title": "Détails",
+                "use_product_details": true
+              }
+            },
+            {
+              "type": "share"
+            }
+          ]
+        }
+      ]
+    },
+    "product-recommendations": {
+      "type": "product-recommendations",
+      "name": "Produits similaires",
+      "category": "Produits",
+      "templates": [
+        "product",
+        "cart"
+      ],
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Titre",
+          "default": "Vous aimerez aussi",
+          "maxLength": 120
+        },
+        {
+          "type": "select",
+          "id": "heading_size",
+          "label": "Taille du titre",
+          "default": "md",
+          "options": [
+            {
+              "value": "sm",
+              "label": "Petit"
+            },
+            {
+              "value": "md",
+              "label": "Moyen"
+            },
+            {
+              "value": "lg",
+              "label": "Grand"
+            },
+            {
+              "value": "xl",
+              "label": "Très grand"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "limit",
+          "label": "Produits affichés",
+          "default": 4,
+          "min": 2,
+          "max": 12
+        },
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "padding_top",
+          "label": "Marge haute",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "range",
+          "id": "padding_bottom",
+          "label": "Marge basse",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        }
+      ],
+      "presets": [
+        {
+          "name": "Produits similaires"
+        }
+      ]
+    },
+    "main-collection": {
+      "type": "main-collection",
+      "name": "Collection",
+      "category": "Modèle",
+      "templates": [
+        "collection",
+        "catalog"
+      ],
+      "required": true,
+      "settings": [
+        {
+          "type": "checkbox",
+          "id": "show_banner",
+          "label": "Bandeau de la collection",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "show_filters",
+          "label": "Filtres",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "show_sort",
+          "label": "Tri",
+          "default": true
+        },
+        {
+          "type": "range",
+          "id": "per_page",
+          "label": "Produits par page",
+          "default": 24,
+          "min": 8,
+          "max": 60,
+          "step": 4
+        },
+        {
+          "type": "segmented",
+          "id": "columns",
+          "label": "Colonnes",
+          "default": "4",
+          "options": [
+            {
+              "value": "2",
+              "label": "2"
+            },
+            {
+              "value": "3",
+              "label": "3"
+            },
+            {
+              "value": "4",
+              "label": "4"
+            }
+          ]
+        }
+      ],
+      "blocks": [
+        {
+          "type": "metafield",
+          "name": "Champ personnalisé",
+          "settings": [
+            {
+              "type": "text",
+              "id": "label",
+              "label": "Libellé",
+              "default": "",
+              "maxLength": 60
+            },
+            {
+              "type": "textarea",
+              "id": "value",
+              "label": "Valeur",
+              "default": "",
+              "maxLength": 500,
+              "info": "Connectez un champ personnalisé (« Connecter une donnée »). Rien ne s'affiche si la valeur est vide."
+            }
+          ]
+        }
+      ],
+      "presets": [
+        {
+          "name": "Collection"
+        }
+      ]
+    },
+    "main-page": {
+      "type": "main-page",
+      "name": "Contenu de la page",
+      "category": "Modèle",
+      "templates": [
+        "page"
+      ],
+      "required": true,
+      "settings": [
+        {
+          "type": "segmented",
+          "id": "width",
+          "label": "Largeur",
+          "default": "narrow",
+          "options": [
+            {
+              "value": "narrow",
+              "label": "Étroite"
+            },
+            {
+              "value": "wide",
+              "label": "Large"
+            }
+          ]
+        }
+      ],
+      "presets": [
+        {
+          "name": "Contenu de la page"
+        }
+      ]
+    },
+    "main-cart": {
+      "type": "main-cart",
+      "name": "Panier",
+      "category": "Modèle",
+      "templates": [
+        "cart"
+      ],
+      "required": true,
+      "settings": [
+        {
+          "type": "checkbox",
+          "id": "show_note",
+          "label": "Note de commande",
+          "default": true
+        },
+        {
+          "type": "header",
+          "content": "Offres (s'appliquent aussi au tiroir)"
+        },
+        {
+          "type": "checkbox",
+          "id": "show_offers",
+          "label": "Produits proposés (offres au panier)",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "show_tier_progress",
+          "label": "Progression des paliers de remise",
+          "default": true
+        },
+        {
+          "type": "checkbox",
+          "id": "show_gift_card_field",
+          "label": "Champ « carte cadeau »",
+          "default": false,
+          "info": "La carte saisie est reprise à la commande."
+        }
+      ],
+      "presets": [
+        {
+          "name": "Panier"
+        }
+      ]
+    },
+    "cart-progress": {
+      "type": "cart-progress",
+      "name": "Barre d'offres",
+      "category": "Mise en avant",
+      "templates": [
+        "cart",
+        "home"
+      ],
+      "settings": [
+        {
+          "type": "text",
+          "id": "heading",
+          "label": "Titre",
+          "default": "",
+          "maxLength": 80,
+          "placeholder": "Profitez de nos offres"
+        },
+        {
+          "type": "text",
+          "id": "empty_text",
+          "label": "Texte panier vide",
+          "default": "Remises automatiques selon le montant de votre panier.",
+          "maxLength": 140
+        },
+        {
+          "type": "checkbox",
+          "id": "hide_when_empty",
+          "label": "Masquer quand le panier est vide",
+          "default": false
+        },
+        {
+          "type": "paragraph",
+          "content": "Affiche la progression vers vos paliers de remise (Promotions, « Remises automatiques », type palier). Masquée s'il n'y a aucun palier actif."
+        },
+        {
+          "type": "select",
+          "id": "scheme",
+          "label": "Couleurs de la section",
+          "default": "default",
+          "options": [
+            {
+              "value": "default",
+              "label": "Par défaut"
+            },
+            {
+              "value": "surface",
+              "label": "Surface"
+            },
+            {
+              "value": "inverse",
+              "label": "Inversé"
+            },
+            {
+              "value": "brand",
+              "label": "Couleur de marque"
+            }
+          ]
+        },
+        {
+          "type": "range",
+          "id": "padding_top",
+          "label": "Marge haute",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        },
+        {
+          "type": "range",
+          "id": "padding_bottom",
+          "label": "Marge basse",
+          "default": 48,
+          "min": 0,
+          "max": 160,
+          "step": 8,
+          "unit": "px"
+        }
+      ],
+      "presets": [
+        {
+          "name": "Barre d'offres",
+          "settings": {
+            "scheme": "surface",
+            "padding_top": 24,
+            "padding_bottom": 24
+          }
+        }
+      ]
+    }
+  },
+  "byTemplate": {
+    "home": [
+      "announcement-bar",
+      "hero-banner",
+      "slideshow",
+      "image-with-text",
+      "rich-text",
+      "featured-collection",
+      "featured-product",
+      "collection-list",
+      "product-grid",
+      "multicolumn",
+      "image-gallery",
+      "video",
+      "testimonials",
+      "reviews",
+      "faq",
+      "newsletter",
+      "whatsapp-cta",
+      "contact",
+      "opening-hours",
+      "map",
+      "logo-list",
+      "countdown",
+      "trust-badges",
+      "custom-spacer",
+      "cart-progress"
+    ],
+    "product": [
+      "announcement-bar",
+      "hero-banner",
+      "slideshow",
+      "image-with-text",
+      "rich-text",
+      "featured-collection",
+      "featured-product",
+      "collection-list",
+      "product-grid",
+      "multicolumn",
+      "image-gallery",
+      "video",
+      "testimonials",
+      "reviews",
+      "faq",
+      "newsletter",
+      "whatsapp-cta",
+      "contact",
+      "opening-hours",
+      "map",
+      "logo-list",
+      "countdown",
+      "trust-badges",
+      "custom-spacer",
+      "main-product",
+      "product-recommendations"
+    ],
+    "collection": [
+      "announcement-bar",
+      "hero-banner",
+      "slideshow",
+      "image-with-text",
+      "rich-text",
+      "featured-collection",
+      "featured-product",
+      "collection-list",
+      "product-grid",
+      "multicolumn",
+      "image-gallery",
+      "video",
+      "testimonials",
+      "reviews",
+      "faq",
+      "newsletter",
+      "whatsapp-cta",
+      "contact",
+      "opening-hours",
+      "map",
+      "logo-list",
+      "countdown",
+      "trust-badges",
+      "custom-spacer",
+      "main-collection"
+    ],
+    "catalog": [
+      "announcement-bar",
+      "hero-banner",
+      "slideshow",
+      "image-with-text",
+      "rich-text",
+      "featured-collection",
+      "featured-product",
+      "collection-list",
+      "product-grid",
+      "multicolumn",
+      "image-gallery",
+      "video",
+      "testimonials",
+      "reviews",
+      "faq",
+      "newsletter",
+      "whatsapp-cta",
+      "contact",
+      "opening-hours",
+      "map",
+      "logo-list",
+      "countdown",
+      "trust-badges",
+      "custom-spacer",
+      "main-collection"
+    ],
+    "page": [
+      "announcement-bar",
+      "hero-banner",
+      "slideshow",
+      "image-with-text",
+      "rich-text",
+      "featured-collection",
+      "featured-product",
+      "collection-list",
+      "product-grid",
+      "multicolumn",
+      "image-gallery",
+      "video",
+      "testimonials",
+      "reviews",
+      "faq",
+      "newsletter",
+      "whatsapp-cta",
+      "contact",
+      "opening-hours",
+      "map",
+      "logo-list",
+      "countdown",
+      "trust-badges",
+      "custom-spacer",
+      "main-page"
+    ],
+    "cart": [
+      "announcement-bar",
+      "hero-banner",
+      "slideshow",
+      "image-with-text",
+      "rich-text",
+      "featured-collection",
+      "featured-product",
+      "collection-list",
+      "product-grid",
+      "multicolumn",
+      "image-gallery",
+      "video",
+      "testimonials",
+      "reviews",
+      "faq",
+      "newsletter",
+      "whatsapp-cta",
+      "contact",
+      "opening-hours",
+      "map",
+      "logo-list",
+      "countdown",
+      "trust-badges",
+      "custom-spacer",
+      "product-recommendations",
+      "main-cart",
+      "cart-progress"
+    ],
+    "search": [
+      "announcement-bar",
+      "hero-banner",
+      "slideshow",
+      "image-with-text",
+      "rich-text",
+      "featured-collection",
+      "featured-product",
+      "collection-list",
+      "product-grid",
+      "multicolumn",
+      "image-gallery",
+      "video",
+      "testimonials",
+      "reviews",
+      "faq",
+      "newsletter",
+      "whatsapp-cta",
+      "contact",
+      "opening-hours",
+      "map",
+      "logo-list",
+      "countdown",
+      "trust-badges",
+      "custom-spacer"
+    ],
+    "not_found": [
+      "announcement-bar",
+      "hero-banner",
+      "slideshow",
+      "image-with-text",
+      "rich-text",
+      "featured-collection",
+      "featured-product",
+      "collection-list",
+      "product-grid",
+      "multicolumn",
+      "image-gallery",
+      "video",
+      "testimonials",
+      "reviews",
+      "faq",
+      "newsletter",
+      "whatsapp-cta",
+      "contact",
+      "opening-hours",
+      "map",
+      "logo-list",
+      "countdown",
+      "trust-badges",
+      "custom-spacer"
+    ],
+    "blog": [
+      "announcement-bar",
+      "hero-banner",
+      "slideshow",
+      "image-with-text",
+      "rich-text",
+      "featured-collection",
+      "featured-product",
+      "collection-list",
+      "product-grid",
+      "multicolumn",
+      "image-gallery",
+      "video",
+      "testimonials",
+      "reviews",
+      "faq",
+      "newsletter",
+      "whatsapp-cta",
+      "contact",
+      "opening-hours",
+      "map",
+      "logo-list",
+      "countdown",
+      "trust-badges",
+      "custom-spacer"
+    ],
+    "article": [
+      "announcement-bar",
+      "hero-banner",
+      "slideshow",
+      "image-with-text",
+      "rich-text",
+      "featured-collection",
+      "featured-product",
+      "collection-list",
+      "product-grid",
+      "multicolumn",
+      "image-gallery",
+      "video",
+      "testimonials",
+      "reviews",
+      "faq",
+      "newsletter",
+      "whatsapp-cta",
+      "contact",
+      "opening-hours",
+      "map",
+      "logo-list",
+      "countdown",
+      "trust-badges",
+      "custom-spacer"
+    ]
+  },
+  "categories": [
+    "Mise en avant",
+    "Produits",
+    "Texte",
+    "Médias",
+    "Confiance",
+    "Contact",
+    "Structure",
+    "Modèle"
+  ]
+}

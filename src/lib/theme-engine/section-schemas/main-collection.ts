@@ -1,0 +1,4 @@
+import type { SectionSchema } from "../types";
+import { metafieldBlock } from "./_shared";
+
+export const schema: SectionSchema = { type: "main-collection", name: "Collection", category: "Modèle", templates: ["collection", "catalog"], required: true, settings: [{ type: "checkbox", id: "show_banner", label: "Bandeau de la collection", default: true }, { type: "checkbox", id: "show_filters", label: "Filtres", default: true }, { type: "checkbox", id: "show_sort", label: "Tri", default: true }, { type: "range", id: "per_page", label: "Produits par page", default: 24, min: 8, max: 60, step: 4 }, { type: "segmented", id: "columns", label: "Colonnes", default: "4", options: [{ value: "2", label: "2" }, { value: "3", label: "3" }, { value: "4", label: "4" }] }], blocks: [metafieldBlock], presets: [{ name: "Collection" }] };

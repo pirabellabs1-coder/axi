@@ -1,0 +1,305 @@
+"use server";
+
+import { z } from "zod";
+import { isStoredMediaUrl } from "@/lib/storage/public-url";
+import { checkImageWrite } from "@/lib/storage/write-guard";
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+import type { Prisma } from "@prisma/client";
+import { db } from "@/lib/db";
+import { requireUserOrThrow, requireStore, effectivePlanId } from "@/lib/auth/permissions";
+import { fail, success, parseForm, guard, zBool, zOptionalString, type ActionResult } from "@/lib/action";
+import { slugify, normalizePhone, addDays } from "@/lib/utils";
+import { COUNTRIES, RESERVED_SLUGS, getCountry } from "@/config/site";
+import { TRIAL_DAYS, TRIAL_PLAN, ZONE_CURRENCY, planRank, zoneForCurrency } from "@/config/plans";
+import { checkStoresQuota, quotaMessage } from "@/lib/commerce/quotas";
+import { audit } from "@/lib/audit";
+import { enqueue } from "@/lib/jobs";
+import { getPreset } from "@/lib/storefront/theme";
+
+/** Secteurs proposés à la création : l'id sert à la fois de `Store.sector` et de `Store.themeId` (presets de thème). */
+const SECTOR_IDS = ["general", "restaurant", "patisserie", "mode", "beaute", "salon", "clinique"] as const;
+export type StoreSector = (typeof SECTOR_IDS)[number];
+
+/** Catégorie historique (marketplace, filtres) déduite du secteur. */
+const SECTOR_CATEGORY: Record<StoreSector, string> = {
+  general: "general",
+  restaurant: "food",
+  patisserie: "food",
+  mode: "fashion",
+  beaute: "beauty",
+  salon: "beauty",
+  clinique: "services",
+};
+
+const createSchema = z.object({
+  name: z.string().trim().min(2, "Nom trop court").max(60, "60 caractères maximum"),
+  slug: z.string().trim().min(3, "Adresse trop courte").max(48, "48 caractères maximum"),
+  country: z.string().length(2, "Choisissez un pays"),
+  sector: z.enum(SECTOR_IDS, { error: "Choisissez un secteur" }),
+  city: zOptionalString,
+  doneForYou: zBool,
+});
+
+export async function isSlugAvailable(slug: string): Promise<{ available: boolean; reason?: string }> {
+  const s = slugify(slug);
+  if (s.length < 3) return { available: false, reason: "3 caractères minimum" };
+  if (RESERVED_SLUGS.has(s)) return { available: false, reason: "Ce nom est réservé" };
+  const exists = await db.store.findUnique({ where: { slug: s }, select: { id: true } });
+  return exists ? { available: false, reason: "Déjà pris" } : { available: true };
+}
+
+/**
+ * Création d'une boutique (brouillon) : secteur + thème, abonnement (essai Business pour la première boutique,
+ * zone tarifaire déduite de la devise), membership OWNER, moyens de paiement et zone de livraison par défaut.
+ */
+export async function createStore(_prev: ActionResult | undefined, formData: FormData): Promise<ActionResult> {
+  return guard(async () => {
+    const user = await requireUserOrThrow();
+    const parsed = parseForm(createSchema, formData);
+    if ("error" in parsed) return parsed.error;
+    const { name, country, sector, city, doneForYou } = parsed.data;
+    const slug = slugify(parsed.data.slug);
+    if (!COUNTRIES.some((c) => c.code === country)) return fail("Pays non pris en charge", { country: ["Pays non pris en charge"] });
+    const avail = await isSlugAvailable(slug);
+    if (!avail.available) return fail(`Adresse de boutique indisponible : ${avail.reason}`, { slug: [avail.reason ?? ""] });
+
+    // Quota boutiques : basé sur le meilleur plan des boutiques possédées (la première boutique bénéficie de l'essai)
+    const owned = await db.membership.findMany({ where: { userId: user.id, role: "OWNER" }, include: { store: { include: { subscription: true } } } });
+    const bestPlan = owned.map((m) => effectivePlanId(m.store.subscription)).sort((a, b) => planRank(b) - planRank(a))[0] ?? "FREE";
+    const isFirstStore = owned.length === 0;
+    const quota = await checkStoresQuota(user.id, isFirstStore ? TRIAL_PLAN : bestPlan);
+    if (!quota.allowed) return fail(quotaMessage(quota));
+
+    const c = getCountry(country);
+    const zone = zoneForCurrency(c.currency);
+    const billingCurrency = ZONE_CURRENCY[zone];
+    const now = new Date();
+
+    const store = await db.$transaction(async (tx) => {
+      const s = await tx.store.create({
+        data: {
+          name,
+          slug,
+          country,
+          city: city || null,
+          currency: c.currency,
+          timezone: c.timezone,
+          category: SECTOR_CATEGORY[sector],
+          sector,
+          themeId: sector,
+          themeConfig: getPreset(sector).config as unknown as Prisma.InputJsonValue,
+          contactEmail: user.email,
+          onboardingStep: 1,
+          subscription: {
+            create: isFirstStore
+              ? { planId: TRIAL_PLAN, status: "TRIALING", zone, currency: billingCurrency, trialEndsAt: addDays(now, TRIAL_DAYS), currentPeriodEnd: addDays(now, TRIAL_DAYS) }
+              : { planId: "FREE", status: "ACTIVE", zone, currency: billingCurrency },
+          },
+          memberships: { create: { userId: user.id, role: "OWNER" } },
+          paymentMethods: {
+            create: [{ kind: "CASH_ON_DELIVERY", label: "Paiement à la livraison ou au retrait", instructions: "Réglez en espèces à la réception de votre commande.", position: 0 }],
+          },
+          deliveryZones: { create: [{ name: city ? `${city} centre` : "Zone 1", fee: c.currency === "XOF" || c.currency === "XAF" ? 1000 : 500, etaLabel: "Sous 24 h", position: 0 }] },
+        },
+      });
+      // Lot 3 : « Dépôt principal » dès la création (majeur n° 8). Sans lui, la boutique n'a aucun dépôt :
+      // caisse inutilisable, aucun niveau de stock écrit, puis autant d'écarts d'inventaire que
+      // d'articles le jour où le commerçant crée son premier dépôt.
+      const { ensureDefaultLocationTx } = await import("@/lib/locations/service");
+      await ensureDefaultLocationTx(tx, s.id, { country, city: city || null });
+      await audit({ storeId: s.id, actorId: user.id, action: "store.created", metadata: { slug, sector, zone, doneForYou } }, tx);
+      return s;
+    });
+    redirect(doneForYou ? `/app/${store.id}/options?addon=DONE_FOR_YOU` : `/app/${store.id}/demarrage`);
+  });
+}
+
+const contactSchema = z.object({
+  storeId: z.string(),
+  whatsappNumber: z.string().trim().min(6, "Numéro WhatsApp requis"),
+  contactPhone: zOptionalString,
+  contactEmail: z.preprocess((v) => (v === "" ? undefined : v), z.string().email("E-mail invalide").optional()),
+  address: zOptionalString,
+  tagline: zOptionalString,
+});
+
+export async function updateStoreContact(_prev: ActionResult | undefined, formData: FormData): Promise<ActionResult> {
+  return guard(async () => {
+    const parsed = parseForm(contactSchema, formData);
+    if ("error" in parsed) return parsed.error;
+    const { storeId, ...data } = parsed.data;
+    const ctx = await requireStore(storeId, "store.settings");
+    const country = getCountry(ctx.store.country);
+    const wa = normalizePhone(data.whatsappNumber, country.dialCode);
+    if (!wa) return fail("Numéro WhatsApp invalide pour ce pays.", { whatsappNumber: ["Numéro invalide"] });
+    await db.store.update({
+      where: { id: storeId },
+      data: {
+        whatsappNumber: wa,
+        contactPhone: data.contactPhone ? normalizePhone(data.contactPhone, country.dialCode) ?? data.contactPhone : null,
+        contactEmail: data.contactEmail ?? null,
+        address: data.address ?? null,
+        tagline: data.tagline ?? null,
+        onboardingStep: Math.max(ctx.store.onboardingStep, 2),
+      },
+    });
+    revalidatePath(`/app/${storeId}`, "layout");
+    return success(undefined, "Coordonnées enregistrées");
+  });
+}
+
+const settingsSchema = z.object({
+  storeId: z.string(),
+  name: z.string().trim().min(2).max(60),
+  tagline: z.preprocess((v) => (v === "" ? undefined : v), z.string().max(160, "160 caractères maximum").optional()),
+  description: z.preprocess((v) => (v === "" ? undefined : v), z.string().max(2000, "2 000 caractères maximum").optional()),
+  category: z.string().max(60),
+  city: z.preprocess((v) => (v === "" ? undefined : v), z.string().max(80).optional()),
+  address: z.preprocess((v) => (v === "" ? undefined : v), z.string().max(200).optional()),
+  contactEmail: z.preprocess((v) => (v === "" ? undefined : v), z.string().email().optional()),
+  contactPhone: zOptionalString,
+  whatsappNumber: zOptionalString,
+  pickupEnabled: zBool,
+  deliveryEnabled: zBool,
+  whatsappOrdering: zBool,
+  listedInMarketplace: zBool,
+  minOrderAmount: z.coerce.number().int().min(0).default(0),
+  orderNotes: z.preprocess((v) => (v === "" ? undefined : v), z.string().max(1000, "1 000 caractères maximum").optional()),
+});
+
+export async function updateStoreSettings(_prev: ActionResult | undefined, formData: FormData): Promise<ActionResult> {
+  return guard(async () => {
+    const parsed = parseForm(settingsSchema, formData);
+    if ("error" in parsed) return parsed.error;
+    const { storeId, ...d } = parsed.data;
+    const ctx = await requireStore(storeId, "store.settings");
+    const country = getCountry(ctx.store.country);
+    const wa = d.whatsappNumber ? normalizePhone(d.whatsappNumber, country.dialCode) : null;
+    if (d.whatsappNumber && !wa) return fail("Numéro WhatsApp invalide.", { whatsappNumber: ["Numéro invalide"] });
+    // Retrait de la marketplace décidé par l'admin : le marchand ne peut pas se relister.
+    if (d.listedInMarketplace && ctx.store.marketplaceBlocked) {
+      return fail("Votre boutique a été retirée de la marketplace par l'équipe Axi. Contactez le support pour la relister.", { listedInMarketplace: ["Retrait administrateur"] });
+    }
+    await db.store.update({
+      where: { id: storeId },
+      data: {
+        name: d.name,
+        tagline: d.tagline ?? null,
+        description: d.description ?? null,
+        category: d.category,
+        city: d.city ?? null,
+        address: d.address ?? null,
+        contactEmail: d.contactEmail ?? null,
+        contactPhone: d.contactPhone ?? null,
+        whatsappNumber: wa,
+        pickupEnabled: d.pickupEnabled,
+        deliveryEnabled: d.deliveryEnabled,
+        whatsappOrdering: d.whatsappOrdering,
+        listedInMarketplace: d.listedInMarketplace && !ctx.store.marketplaceBlocked,
+        minOrderAmount: d.minOrderAmount,
+        orderNotes: d.orderNotes ?? null,
+      },
+    });
+    await audit({ storeId, actorId: ctx.user.id, action: "store.settings_updated" });
+    revalidatePath(`/app/${storeId}`, "layout");
+    revalidatePath(`/s/${ctx.store.slug}`, "layout");
+    return success(undefined, "Paramètres enregistrés");
+  });
+}
+
+const hoursSchema = z.object({ storeId: z.string(), hours: z.string() });
+
+export async function updateOpeningHours(_prev: ActionResult | undefined, formData: FormData): Promise<ActionResult> {
+  return guard(async () => {
+    const parsed = parseForm(hoursSchema, formData);
+    if ("error" in parsed) return parsed.error;
+    const ctx = await requireStore(parsed.data.storeId, "store.settings");
+    let hours: unknown;
+    try {
+      hours = JSON.parse(parsed.data.hours);
+    } catch {
+      return fail("Horaires invalides");
+    }
+    const schema = z.record(z.string(), z.array(z.tuple([z.string().regex(/^\d{2}:\d{2}$/), z.string().regex(/^\d{2}:\d{2}$/)])));
+    const v = schema.safeParse(hours);
+    if (!v.success) return fail("Horaires invalides");
+    await db.store.update({ where: { id: ctx.store.id }, data: { openingHours: v.data as Prisma.InputJsonValue } });
+    revalidatePath(`/s/${ctx.store.slug}`, "layout");
+    return success(undefined, "Horaires enregistrés");
+  });
+}
+
+export async function publishStore(storeId: string): Promise<ActionResult> {
+  return guard(async () => {
+    const ctx = await requireStore(storeId, "store.publish");
+    const s = ctx.store;
+    const missing: string[] = [];
+    if (!s.whatsappNumber) missing.push("un numéro WhatsApp");
+    const products = await db.product.count({ where: { storeId, status: "ACTIVE" } });
+    if (products === 0) missing.push("au moins un produit actif");
+    const methods = await db.paymentMethod.count({ where: { storeId, active: true } });
+    if (methods === 0) missing.push("un moyen de paiement actif");
+    if (missing.length) return fail(`Avant de publier, ajoutez ${missing.join(", ")}.`);
+    if (s.status === "SUSPENDED") return fail("Boutique suspendue par la plateforme.");
+
+    await db.$transaction(async (tx) => {
+      await tx.store.update({
+        where: { id: storeId },
+        data: { status: "PUBLISHED", publishedAt: s.publishedAt ?? new Date(), onboardingCompleted: true, onboardingStep: 99, statusReason: null },
+      });
+      await audit({ storeId, actorId: ctx.user.id, action: "store.published" }, tx);
+      await enqueue("store.published", { storeId }, { storeId }, tx);
+    });
+    revalidatePath(`/app/${storeId}`, "layout");
+    revalidatePath(`/s/${s.slug}`, "layout");
+    revalidatePath("/marketplace");
+    return success(undefined, "Boutique publiée");
+  });
+}
+
+export async function setStoreStatus(storeId: string, status: "PUBLISHED" | "CLOSED_TEMPORARILY" | "ARCHIVED", reason?: string): Promise<ActionResult> {
+  return guard(async () => {
+    const ctx = await requireStore(storeId, status === "ARCHIVED" ? "store.delete" : "store.publish");
+    if (ctx.store.status === "SUSPENDED") return fail("Boutique suspendue par la plateforme.");
+    await db.$transaction(async (tx) => {
+      await tx.store.update({ where: { id: storeId }, data: { status, statusReason: reason ?? null } });
+      await audit({ storeId, actorId: ctx.user.id, action: `store.status.${status.toLowerCase()}`, metadata: { reason } }, tx);
+    });
+    revalidatePath(`/app/${storeId}`, "layout");
+    revalidatePath(`/s/${ctx.store.slug}`, "layout");
+    revalidatePath("/marketplace");
+    if (status === "ARCHIVED") redirect("/app");
+    return success(undefined, "Statut mis à jour");
+  });
+}
+
+export async function setOnboardingStep(storeId: string, step: number): Promise<ActionResult> {
+  return guard(async () => {
+    const ctx = await requireStore(storeId, "store.settings");
+    if (step > ctx.store.onboardingStep) await db.store.update({ where: { id: storeId }, data: { onboardingStep: step } });
+    revalidatePath(`/app/${storeId}/demarrage`);
+    return success();
+  });
+}
+
+const brandSchema = z.object({ storeId: z.string(), logoUrl: zOptionalString, bannerUrl: zOptionalString });
+
+export async function updateBrandAssets(_prev: ActionResult | undefined, formData: FormData): Promise<ActionResult> {
+  return guard(async () => {
+    const parsed = parseForm(brandSchema, formData);
+    if ("error" in parsed) return parsed.error;
+    const ctx = await requireStore(parsed.data.storeId, "theme.manage");
+    // https ou média téléversé de la boutique ; une ancienne data-URL n'est conservée que si elle est identique
+    // à la valeur actuelle (checkImageWrite). Adresses bornées et ancrées.
+    const okUrl = (u?: string) => !u || (u.length <= 2000 && /^https:\/\/[^\s"'<>]+$/i.test(u)) || isStoredMediaUrl(u) || u.startsWith("data:");
+    if (!okUrl(parsed.data.logoUrl) || !okUrl(parsed.data.bannerUrl)) return fail("URL d'image invalide");
+    const logoIssue = checkImageWrite(parsed.data.logoUrl ?? null, { storeId: ctx.store.id, existing: [ctx.store.logoUrl] });
+    const bannerIssue = checkImageWrite(parsed.data.bannerUrl ?? null, { storeId: ctx.store.id, existing: [ctx.store.bannerUrl] });
+    if (logoIssue || bannerIssue) return fail((logoIssue ?? bannerIssue)!);
+    await db.store.update({ where: { id: ctx.store.id }, data: { logoUrl: parsed.data.logoUrl ?? null, bannerUrl: parsed.data.bannerUrl ?? null } });
+    revalidatePath(`/app/${ctx.store.id}`, "layout");
+    revalidatePath(`/s/${ctx.store.slug}`, "layout");
+    return success(undefined, "Images enregistrées");
+  });
+}

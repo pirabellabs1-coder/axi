@@ -1,0 +1,37 @@
+name: Axi jobs cron
+
+# Appelle /api/jobs/run toutes les 5 minutes (outbox e-mail, rapprochement des
+# paiements, cycle de vie des abonnements, campagnes, balayage périodique).
+# Remplace le cron Vercel (interdit en plan Hobby). Voir docs/DEPLOIEMENT.md §4 et §5.
+#
+# Pré-requis (une seule fois) :
+#   1. Le dépôt doit être sur GitHub.
+#   2. Secrets du dépôt (Settings > Secrets and variables > Actions) :
+#        - JOBS_RUN_KEY : identique à la variable JOBS_RUN_KEY définie dans Vercel.
+#        - AXI_PROD_URL : https://axi-alpha.vercel.app (ou le domaine final).
+#
+# Note : GitHub Actions peut retarder/regrouper les exécutions planifiées en période
+# de charge ; pour un rythme strict, préférer cron-job.org ou un worker `pnpm jobs`.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: axi-jobs-cron
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Déclencher /api/jobs/run
+        run: |
+          code=$(curl -fsS -m 70 -o /tmp/out.json -w "%{http_code}" \
+            -H "x-jobs-key: ${{ secrets.JOBS_RUN_KEY }}" \
+            "${{ secrets.AXI_PROD_URL }}/api/jobs/run") || true
+          echo "HTTP $code"
+          cat /tmp/out.json || true
+          test "$code" = "200"

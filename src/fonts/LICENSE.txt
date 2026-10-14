@@ -1,0 +1,3 @@
+Geist et Geist Mono, Copyright 2024 The Geist Project Authors (https://github.com/vercel/geist-font).
+Distribuées sous licence SIL Open Font License 1.1 (https://openfontlicense.org).
+Fichiers : sous-ensemble latin variable (100-900), auto-hébergés pour ne pas dépendre de Google Fonts au build.

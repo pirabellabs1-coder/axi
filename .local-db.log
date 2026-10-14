@@ -1,0 +1,9 @@
+Initialisation du cluster PostgreSQL local…
+
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+undefined
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v24.18.0

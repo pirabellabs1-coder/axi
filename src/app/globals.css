@@ -1,0 +1,424 @@
+@import "tailwindcss";
+
+/*
+ * Axi — design system v2 (voir design-system/axi/MASTER.md)
+ * Lecture : SaaS de commerce pour commerçants d'Afrique francophone, langage « Forest + Lime »,
+ * Geist, formes douces (boutons pilule, cartes 24 px, champs 14 px), mouvement fluide et motivé.
+ * Thème clair par défaut, thème sombre via prefers-color-scheme ou [data-theme="dark"].
+ */
+
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *):not(:where([data-theme="light"], [data-theme="light"] *, :root:has([data-store-root], [data-store]) *)) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]) *):not(:where([data-theme="light"], [data-theme="light"] *, :root:has([data-store-root], [data-store]) *)) {
+      @slot;
+    }
+  }
+}
+
+/* ───────────── Valeurs (clair) ───────────── */
+:root,
+[data-theme="light"] {
+  --c-canvas: #f3f4ef;
+  --c-canvas-deep: #e9ebe4;
+  --c-surface: #ffffff;
+  --c-surface-2: #f0f2ec;
+  --c-line: #e1e4dc;
+  --c-line-strong: #cdd2c7;
+  --c-ink: #0e1411;
+  --c-ink-muted: #56605a;
+  --c-ink-faint: #646d67;
+
+  --c-primary: #0d3b2e;
+  --c-primary-hover: #0a2f24;
+  --c-primary-soft: #e3eee8;
+  --c-primary-deep: #072319;
+  --c-on-primary: #ffffff;
+
+  --c-accent: #b8f06a;
+  --c-accent-hover: #a6e352;
+  --c-accent-soft: #eef9dc;
+  --c-on-accent: #0b1a10;
+
+  --c-sun: #f2b53a;
+  --c-sun-soft: #fdf3dc;
+  --c-info: #2459d6;
+  --c-info-soft: #e7eefc;
+  --c-warning: #a35208;
+  --c-warning-soft: #fcefdf;
+  --c-danger: #c42b2b;
+  --c-danger-soft: #fbe7e5;
+  --c-whatsapp: #25d366;
+  --c-whatsapp-deep: #0f7a5c;
+
+  --c-shadow: 13 59 46;
+  --c-highlight: 255 255 255;
+  --shadow-inset: inset 0 1px 0 rgb(255 255 255 / 0.6);
+  color-scheme: light;
+}
+
+/* ───────────── Valeurs (sombre) ───────────── */
+:root[data-theme="dark"],
+[data-theme="dark"] {
+  --c-canvas: #0a0f0c;
+  --c-canvas-deep: #070b09;
+  --c-surface: #111814;
+  --c-surface-2: #18211c;
+  --c-line: rgb(255 255 255 / 0.08);
+  --c-line-strong: rgb(255 255 255 / 0.14);
+  --c-ink: #eef2ec;
+  --c-ink-muted: #a3aea7;
+  --c-ink-faint: #808b84;
+
+  --c-primary: #b8f06a;
+  --c-primary-hover: #c8f68a;
+  --c-primary-soft: rgb(184 240 106 / 0.12);
+  --c-primary-deep: #dff8b8;
+  --c-on-primary: #0b1a10;
+
+  --c-accent: #b8f06a;
+  --c-accent-hover: #c8f68a;
+  --c-accent-soft: rgb(184 240 106 / 0.12);
+  --c-on-accent: #0b1a10;
+
+  --c-sun-soft: rgb(242 181 58 / 0.14);
+  --c-info: #7ea2ff;
+  --c-info-soft: rgb(126 162 255 / 0.14);
+  --c-warning: #f0a35a;
+  --c-warning-soft: rgb(240 163 90 / 0.14);
+  --c-danger: #ff7b72;
+  --c-danger-soft: rgb(255 123 114 / 0.14);
+
+  --c-shadow: 0 0 0;
+  --c-highlight: 255 255 255;
+  /* Liseré intérieur discret : à 60 % il dessine un trait clair dur en haut des cartes sombres */
+  --shadow-inset: inset 0 1px 0 rgb(255 255 255 / 0.05);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --c-canvas: #0a0f0c;
+    --c-canvas-deep: #070b09;
+    --c-surface: #111814;
+    --c-surface-2: #18211c;
+    --c-line: rgb(255 255 255 / 0.08);
+    --c-line-strong: rgb(255 255 255 / 0.14);
+    --c-ink: #eef2ec;
+    --c-ink-muted: #a3aea7;
+    --c-ink-faint: #808b84;
+    --c-primary: #b8f06a;
+    --c-primary-hover: #c8f68a;
+    --c-primary-soft: rgb(184 240 106 / 0.12);
+    --c-primary-deep: #dff8b8;
+    --c-on-primary: #0b1a10;
+    --c-accent: #b8f06a;
+    --c-accent-hover: #c8f68a;
+    --c-accent-soft: rgb(184 240 106 / 0.12);
+    --c-on-accent: #0b1a10;
+    --c-sun-soft: rgb(242 181 58 / 0.14);
+    --c-info: #7ea2ff;
+    --c-info-soft: rgb(126 162 255 / 0.14);
+    --c-warning: #f0a35a;
+    --c-warning-soft: rgb(240 163 90 / 0.14);
+    --c-danger: #ff7b72;
+    --c-danger-soft: rgb(255 123 114 / 0.14);
+    --c-shadow: 0 0 0;
+    --shadow-inset: inset 0 1px 0 rgb(255 255 255 / 0.05);
+    color-scheme: dark;
+  }
+}
+
+/* ───────────── Boutique publique : toujours en clair ─────────────
+ * Bloc séparé (ne pas fusionner avec le bloc clair : Lightning CSS réécrirait la liste en `:is()`, dont la
+ * spécificité est celle de l'argument le plus fort, et le clair l'emporterait alors partout). Placé après le
+ * sombre, à spécificité égale (0,2,0), il force <html> et <body> en clair sur /s/* et /suivi : fond, barres de
+ * défilement (color-scheme) et toasts rendus hors de la racine boutique.
+ */
+:root:has([data-store-root], [data-store]) {
+  --c-canvas: #f3f4ef;
+  --c-canvas-deep: #e9ebe4;
+  --c-surface: #ffffff;
+  --c-surface-2: #f0f2ec;
+  --c-line: #e1e4dc;
+  --c-line-strong: #cdd2c7;
+  --c-ink: #0e1411;
+  --c-ink-muted: #56605a;
+  --c-ink-faint: #646d67;
+
+  --c-primary: #0d3b2e;
+  --c-primary-hover: #0a2f24;
+  --c-primary-soft: #e3eee8;
+  --c-primary-deep: #072319;
+  --c-on-primary: #ffffff;
+
+  --c-accent: #b8f06a;
+  --c-accent-hover: #a6e352;
+  --c-accent-soft: #eef9dc;
+  --c-on-accent: #0b1a10;
+
+  --c-sun: #f2b53a;
+  --c-sun-soft: #fdf3dc;
+  --c-info: #2459d6;
+  --c-info-soft: #e7eefc;
+  --c-warning: #a35208;
+  --c-warning-soft: #fcefdf;
+  --c-danger: #c42b2b;
+  --c-danger-soft: #fbe7e5;
+  --c-whatsapp: #25d366;
+  --c-whatsapp-deep: #0f7a5c;
+
+  --c-shadow: 13 59 46;
+  --c-highlight: 255 255 255;
+  --shadow-inset: inset 0 1px 0 rgb(255 255 255 / 0.6);
+  color-scheme: light;
+}
+
+/* ───────────── Tokens Tailwind ───────────── */
+@theme inline {
+  --color-ink: var(--c-ink);
+  --color-ink-muted: var(--c-ink-muted);
+  --color-ink-faint: var(--c-ink-faint);
+  --color-canvas: var(--c-canvas);
+  --color-canvas-deep: var(--c-canvas-deep);
+  --color-surface: var(--c-surface);
+  --color-surface-2: var(--c-surface-2);
+  --color-line: var(--c-line);
+  --color-line-strong: var(--c-line-strong);
+  --color-primary: var(--c-primary);
+  --color-primary-hover: var(--c-primary-hover);
+  --color-primary-soft: var(--c-primary-soft);
+  --color-primary-deep: var(--c-primary-deep);
+  --color-on-primary: var(--c-on-primary);
+  --color-accent: var(--c-accent);
+  --color-accent-hover: var(--c-accent-hover);
+  --color-accent-soft: var(--c-accent-soft);
+  --color-on-accent: var(--c-on-accent);
+  --color-sun: var(--c-sun);
+  --color-sun-soft: var(--c-sun-soft);
+  --color-info: var(--c-info);
+  --color-info-soft: var(--c-info-soft);
+  --color-warning: var(--c-warning);
+  --color-warning-soft: var(--c-warning-soft);
+  --color-danger: var(--c-danger);
+  --color-danger-soft: var(--c-danger-soft);
+  --color-whatsapp: var(--c-whatsapp);
+  --color-whatsapp-deep: var(--c-whatsapp-deep);
+  /* Couleurs fixes de marque (indépendantes du thème) */
+  --color-forest: #0d3b2e;
+  --color-forest-deep: #072319;
+  --color-lime: #b8f06a;
+  --color-bone: #f3f4ef;
+
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+}
+
+@theme {
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius-2xl: 36px;
+
+  --shadow-sm: 0 1px 2px rgb(var(--c-shadow) / 0.06);
+  --shadow-md: 0 12px 32px -16px rgb(var(--c-shadow) / 0.22);
+  --shadow-lg: 0 32px 80px -32px rgb(var(--c-shadow) / 0.35);
+  --shadow-card: 0 1px 1px rgb(var(--c-shadow) / 0.04), 0 12px 32px -20px rgb(var(--c-shadow) / 0.18);
+  --shadow-inset: inset 0 1px 0 rgb(var(--c-highlight) / 0.6);
+
+  --text-display: clamp(2.6rem, 6.2vw, 5.25rem);
+  --text-display--line-height: 0.98;
+  --text-display--letter-spacing: -0.045em;
+  --text-h1: clamp(2.1rem, 4.4vw, 3.6rem);
+  --text-h1--line-height: 1.04;
+  --text-h1--letter-spacing: -0.04em;
+  --text-h2: clamp(1.7rem, 3.2vw, 2.6rem);
+  --text-h2--line-height: 1.08;
+  --text-h2--letter-spacing: -0.035em;
+  --text-h3: 1.25rem;
+  --text-h3--line-height: 1.3;
+  --text-h3--letter-spacing: -0.015em;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --animate-fade-up: fade-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-fade-in: fade-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-pulse-soft: pulse-soft 2.4s ease-in-out infinite;
+  --animate-marquee: marquee 48s linear infinite;
+  --animate-float: float 7s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(16px); filter: blur(6px); }
+    to { opacity: 1; transform: translateY(0); filter: blur(0); }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes pulse-soft {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+}
+
+/* Thème boutique (surchargé inline par chaque boutique) */
+:root {
+  --store-primary: #0d3b2e;
+  --store-primary-contrast: #ffffff;
+  --store-accent: #b8f06a;
+  --store-radius: 999px;
+  --store-card-radius: 20px;
+}
+
+@layer base {
+  * {
+    @apply border-line;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+    background: var(--c-canvas);
+  }
+  body {
+    @apply bg-canvas text-ink font-sans antialiased;
+    font-feature-settings: "ss01", "cv11";
+    text-rendering: optimizeLegibility;
+  }
+  h1, h2, h3, h4 {
+    @apply font-display text-balance;
+    letter-spacing: -0.025em;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  ::selection {
+    background: var(--c-accent);
+    color: var(--c-on-accent);
+  }
+  :focus-visible {
+    outline: 2px solid var(--c-primary);
+    outline-offset: 2px;
+  }
+  button, [role="button"], a, summary, label[for], select {
+    cursor: pointer;
+  }
+  input, select, textarea {
+    font-size: max(16px, 1rem);
+  }
+  /* Icônes Lucide : trait fin et précis, uniforme dans tout le produit */
+  svg.lucide {
+    stroke-width: 1.6;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Double-bezel : coque extérieure + noyau intérieur (cartes premium) */
+  .bezel {
+    border-radius: var(--radius-xl);
+    padding: 6px;
+    background: rgb(var(--c-shadow) / 0.035);
+    box-shadow: inset 0 0 0 1px rgb(var(--c-shadow) / 0.06);
+  }
+  :where([data-theme="dark"]) .bezel:not(:where([data-theme="light"] *)) {
+    background: rgb(255 255 255 / 0.03);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.07);
+  }
+  @media (prefers-color-scheme: dark) {
+    :where(:root:not([data-theme="light"])) .bezel:not(:where([data-theme="light"] *)) {
+      background: rgb(255 255 255 / 0.03);
+      box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.07);
+    }
+  }
+  .bezel-core {
+    border-radius: calc(var(--radius-xl) - 6px);
+    background: var(--c-surface);
+    box-shadow: var(--shadow-inset), 0 1px 2px rgb(var(--c-shadow) / 0.05);
+  }
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 999px;
+    padding: 0.3rem 0.8rem;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    background: var(--c-surface);
+    box-shadow: inset 0 0 0 1px var(--c-line);
+    color: var(--c-ink-muted);
+  }
+}
+
+@layer utilities {
+  .container-x {
+    @apply mx-auto w-full max-w-[1280px] px-4 sm:px-6 lg:px-8;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+  .ease-spring {
+    transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .ease-out-expo {
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  /* Grain : uniquement sur un calque fixe, jamais sur un conteneur qui défile */
+  .grain-fixed::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    pointer-events: none;
+    opacity: 0.028;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  /* Révélation au scroll (IntersectionObserver ajoute .is-visible) */
+  .reveal {
+    opacity: 0;
+    transform: translateY(28px);
+    filter: blur(8px);
+    transition:
+      opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.9s cubic-bezier(0.16, 1, 0.3, 1),
+      filter 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .reveal.is-visible {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal {
+      opacity: 1;
+      transform: none;
+      filter: none;
+    }
+  }
+}

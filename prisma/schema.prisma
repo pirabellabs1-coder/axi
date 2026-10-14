@@ -1,0 +1,3048 @@
+// Axi — modèle de données (PostgreSQL)
+// Toutes les entités métier sensibles portent storeId et sont filtrées côté serveur
+// (voir src/lib/auth/permissions.ts). Montants en unités monétaires entières (XOF sans décimales).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────── Identité ───────────────────────────
+
+enum MembershipRole {
+  OWNER
+  MANAGER
+  STAFF
+  SUPPORT
+}
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  emailVerifiedAt DateTime?
+  phone           String?
+  passwordHash    String
+  name            String
+  locale          String    @default("fr")
+  isPlatformAdmin Boolean   @default(false)
+  mfaEnabled      Boolean   @default(false)
+  // Double authentification TOTP (obligatoire pour les super-administrateurs), secret chiffré
+  mfaSecretEnc    String?
+  // Rôle plateforme : SUPER_ADMIN (tout) | SUPPORT (lecture, tickets) | FINANCE (facturation)
+  platformRole    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  sessions              Session[]
+  memberships           Membership[]
+  tokens                VerificationToken[]
+  auditLogs             AuditLog[]
+  orderEvents           OrderEvent[]
+  invitations           Invitation[]             @relation("InvitedBy")
+  supportTickets        SupportTicket[]
+  assignedConversations Conversation[]           @relation("ConversationAssignee")
+  messages              Message[]
+  apiTokens             ApiToken[]
+  oauthCodes            OAuthAuthorizationCode[]
+  oauthGrants           OAuthGrant[]
+  developedApps         App[]                    @relation("AppDeveloper")
+  appInstalls           AppInstallation[]        @relation("AppInstalledBy")
+  collaborations        StoreCollaborator[]      @relation("CollaboratorUser")
+  collaboratorInvites   StoreCollaborator[]      @relation("CollaboratorInviter")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  userAgent String?
+  ip        String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum TokenPurpose {
+  EMAIL_VERIFY
+  PASSWORD_RESET
+  MAGIC_LOGIN
+}
+
+model VerificationToken {
+  id        String       @id @default(cuid())
+  userId    String
+  purpose   TokenPurpose
+  codeHash  String
+  attempts  Int          @default(0)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime     @default(now())
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+}
+
+model Membership {
+  id        String         @id @default(cuid())
+  userId    String
+  storeId   String
+  role      MembershipRole
+  // SUPPORT : accès temporaire, justifié et audité
+  expiresAt DateTime?
+  reason    String?
+  createdAt DateTime       @default(now())
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store     Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, storeId])
+  @@index([storeId])
+}
+
+model Invitation {
+  id          String         @id @default(cuid())
+  storeId     String
+  email       String
+  role        MembershipRole
+  tokenHash   String         @unique
+  invitedById String
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime       @default(now())
+  store       Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  invitedBy   User           @relation("InvitedBy", fields: [invitedById], references: [id])
+
+  @@index([storeId])
+}
+
+// ─────────────────────────── Boutique ───────────────────────────
+
+enum StoreStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED_TEMPORARILY
+  SUSPENDED
+  ARCHIVED
+}
+
+model Store {
+  id           String      @id @default(cuid())
+  slug         String      @unique
+  name         String
+  tagline      String?
+  description  String?
+  category     String      @default("general") // general | food | fashion | beauty | electronics | home | services
+  country      String      @default("BJ")
+  city         String?
+  currency     String      @default("XOF")
+  timezone     String      @default("Africa/Porto-Novo")
+  locale       String      @default("fr")
+  status       StoreStatus @default(DRAFT)
+  statusReason String?
+
+  // Contact & WhatsApp
+  whatsappNumber String? // E.164 sans '+', ex. 22997000000
+  contactEmail   String?
+  contactPhone   String?
+  address        String?
+  openingHours   Json? // { mon: [["08:00","18:00"]], ... }
+
+  // Marque / thème (personnalisation encadrée, pas de JS marchand)
+  logoUrl       String?
+  bannerUrl     String?
+  themeId       String  @default("market") // market | restaurant | fashion | beauty
+  themeConfig   Json? // { primary, accent, font, radius, sections:[...] }
+  // Constructeur de boutique v2 (sections et blocs, voir src/lib/theme-engine/types.ts)
+  themeDoc      Json?
+  themeDocDraft Json?
+  themeDraft    Json?
+
+  // Secteur / modèle : general | restaurant | patisserie | mode | beaute | salon | clinique
+  sector          String  @default("general")
+  // Mesure publicitaire
+  metaPixelId     String?
+  gaMeasurementId String?
+  // Fidélité : { enabled, pointsPer1000, rewardPoints, rewardValue }
+  loyaltyConfig   Json?
+
+  // Marketplace
+  listedInMarketplace Boolean @default(true)
+  // Retrait de la marketplace décidé par l'administration (le commerçant ne peut pas le lever)
+  marketplaceBlocked  Boolean @default(false)
+  isFeatured          Boolean @default(false)
+
+  // Checkout / commerce
+  pickupEnabled    Boolean @default(true)
+  deliveryEnabled  Boolean @default(true)
+  whatsappOrdering Boolean @default(true)
+  minOrderAmount   Int     @default(0)
+  orderNotes       String? // message affiché au checkout
+  showPoweredBy    Boolean @default(true)
+
+  // Commerce agentique : MCP vitrine public (/api/mcp/store/{slug}) et /s/{slug}/llms.txt
+  aiAgentsEnabled Boolean @default(true)
+
+  // Lot 1 : comptes acheteurs (connexion par code) et politique de retours (src/lib/returns/policy.ts)
+  accountsEnabled Boolean @default(true)
+  returnPolicy    Json?
+
+  // Lot 2 : langues secondaires (la principale reste `locale`), taxes et numérotation des factures
+  enabledLocales    String[] @default([])
+  i18nConfig        Json? // { glossary: [{ term }] }
+  taxesEnabled      Boolean  @default(false)
+  pricesIncludeTax  Boolean  @default(true)
+  taxRegistration   Json? // { legalName, taxId, rccm, address, regime, exemptionMention }
+  invoiceCounter    Int      @default(0) // incrémenté sous verrou de ligne dans la transaction d'émission
+  creditNoteCounter Int      @default(0)
+
+  // Lot 4 : kit de marque { logoUrl, palette[], primary, accent, fontPair, voice } et PWA { enabled, icon192, icon512, installPrompt, pushEnabled }
+  brandKit  Json?
+  pwaConfig Json?
+
+  // Lot 3 (caisse) : code gérant à 4-6 chiffres autorisant une remise au-delà du plafond du rôle.
+  // Seule l'empreinte HMAC(APP_SECRET) est conservée (même approche que `Shipment.deliveryCodeHash`) :
+  // le code en clair n'existe nulle part en base et n'est jamais réaffiché.
+  posManagerCodeHash  String?
+  posManagerCodeSetAt DateTime?
+
+  // Onboarding
+  onboardingStep      Int       @default(0)
+  onboardingCompleted Boolean   @default(false)
+  publishedAt         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships      Membership[]
+  invitations      Invitation[]
+  categories       Category[]
+  products         Product[]
+  carts            Cart[]
+  orders           Order[]
+  customers        Customer[]
+  coupons          Coupon[]
+  deliveryZones    DeliveryZone[]
+  pickupSlots      PickupSlot[]
+  paymentMethods   PaymentMethod[]
+  subscription     Subscription?
+  usageCounters    UsageCounter[]
+  domains          Domain[]
+  integrations     Integration[]
+  notifications    Notification[]
+  jobs             Job[]
+  auditLogs        AuditLog[]
+  automations      Automation[]
+  inventoryMoves   InventoryMovement[]
+  supportTickets   SupportTicket[]
+  addOnPurchases   AddOnPurchase[]
+  creditLedger     CreditLedger[]
+  conversations    Conversation[]
+  quickReplies     QuickReply[]
+  campaigns        Campaign[]
+  reviews          Review[]
+  loyaltyLedger    LoyaltyLedger[]
+  pages            StorePage[]
+  apiTokens        ApiToken[]
+  oauthCodes       OAuthAuthorizationCode[]
+  oauthGrants      OAuthGrant[]
+  apiRequestLogs   ApiRequestLog[]
+  appInstallations AppInstallation[]
+  collaborators    StoreCollaborator[]
+
+  // Lot 1 : ventes et fidélité
+  customerOtps            CustomerOtp[]
+  customerSessions        CustomerSession[]
+  customerAddresses       CustomerAddress[]
+  customerFavorites       CustomerFavorite[]
+  automaticDiscounts      AutomaticDiscount[]
+  orderDiscounts          OrderDiscount[]
+  cartOffers              CartOffer[]
+  giftCards               GiftCard[]
+  giftCardTransactions    GiftCardTransaction[]
+  storeCreditTransactions StoreCreditTransaction[]
+  returnRequests          ReturnRequest[]
+
+  // Lot 1 bis : synchronisation du catalogue WhatsApp / Meta Commerce (modèle du lot 4 §20, créé en avance)
+  socialCatalogSyncs SocialCatalogSync[]
+  socialCatalogItems SocialCatalogItem[]
+
+  // Lot 2 : international et contenu
+  translations      Translation[]
+  storeCurrencies   StoreCurrency[]
+  productPrices     ProductPrice[]
+  taxRates          TaxRate[]
+  invoices          OrderInvoice[]
+  blogCategories    BlogCategory[]
+  blogPosts         BlogPost[]
+  webhookEndpoints  WebhookEndpoint[]
+  webhookDeliveries WebhookDelivery[]
+  idempotencyKeys   ApiIdempotencyKey[]
+
+  // Lot 4 : personnalisation (socialCatalogSyncs : voir lot 1 bis)
+  metafieldDefinitions MetafieldDefinition[]
+  metafieldValues      MetafieldValue[]
+  savedSections        SavedSection[]
+  themeSchedules       ThemeSchedule[]
+  themeGenerations     ThemeGeneration[]
+  experiments          Experiment[]
+  pushSubscriptions    PushSubscription[]
+  liveEvents           LiveEvent[]
+  digitalAssets        DigitalAsset[]
+  downloadGrants       DownloadGrant[]
+
+  // Lot 3 : operations (depots, expedition, caisse)
+  locations       Location[]
+  inventoryLevels InventoryLevel[]
+  stockTransfers  StockTransfer[]
+  carrierAccounts CarrierAccount[]
+  shippingRates   ShippingRate[]
+  shipments       Shipment[]
+  posDevices      PosDevice[]
+  posSessions     PosSession[]
+
+  @@index([status, listedInMarketplace])
+  @@index([country, category])
+}
+
+model Domain {
+  id          String   @id @default(cuid())
+  storeId     String
+  hostname    String   @unique
+  verified    Boolean  @default(false)
+  verifyToken String
+  isPrimary   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+}
+
+// ─────────────────────────── Catalogue ───────────────────────────
+
+model Category {
+  id             String    @id @default(cuid())
+  storeId        String
+  name           String
+  slug           String
+  position       Int       @default(0)
+  // Collection façon Shopify : visuel, description, SEO, règles automatiques et tri
+  imageUrl       String?
+  description    String?
+  seoTitle       String?
+  seoDescription String?
+  // { match: "all" | "any", conditions: [{ field: "tag" | "price" | "title" | "promo", op, value }] } ; null = manuelle
+  rules          Json?
+  sortOrder      String    @default("manual") // manual | newest | price_asc | price_desc | best_selling | alpha
+  published      Boolean   @default(true)
+  // Lot 4 : modèle alternatif (ThemeDocument.alternates.collection[suffix]) ; null = modèle par défaut
+  templateSuffix String?
+  store          Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  products       Product[]
+
+  @@unique([storeId, slug])
+}
+
+/// « Continuer à vendre en cas de rupture » (Shopify : inventory_policy deny | continue).
+/// DENY : la commande est refusée au-delà du stock ; CONTINUE : vente autorisée, le stock peut devenir négatif (précommande).
+enum InventoryPolicy {
+  DENY
+  CONTINUE
+}
+
+enum ProductStatus {
+  ACTIVE
+  DRAFT
+  ARCHIVED
+}
+
+// Vague 2 (produits numériques et services) : nature du produit.
+// PHYSICAL = livré ou retiré (défaut, comportement historique) ; DIGITAL = fichiers téléchargeables ;
+// SERVICE = prestation (sans expédition) ; GIFT_CARD = carte cadeau (reste synchronisé avec Product.isGiftCard).
+enum ProductKind {
+  PHYSICAL
+  DIGITAL
+  SERVICE
+  GIFT_CARD
+}
+
+model Product {
+  id                         String          @id @default(cuid())
+  storeId                    String
+  categoryId                 String?
+  name                       String
+  slug                       String
+  description                String?
+  status                     ProductStatus   @default(ACTIVE)
+  // Prix de base (variantes peuvent surcharger)
+  price                      Int
+  compareAtPrice             Int?
+  promoPrice                 Int?
+  promoStart                 DateTime?
+  promoEnd                   DateTime?
+  costPrice                  Int?
+  sku                        String?
+  // Code-barres (EAN, UPC, ISBN) d'un produit sans variante ; les variantes ont le leur.
+  barcode                    String?
+  trackStock                 Boolean         @default(false)
+  stock                      Int             @default(0)
+  // Produit sans variante : vendre en rupture ou non. Avec variantes : réglage par variante.
+  inventoryPolicy            InventoryPolicy @default(DENY)
+  // Seuil d'alerte « stock bas » propre au produit ; null = seuil par défaut de la boutique (réglages de notifications).
+  lowStockThreshold          Int?
+  // Dernier changement du seuil propre au produit : seuls les franchissements postérieurs déclenchent une alerte.
+  lowStockThresholdChangedAt DateTime?
+  minQty                     Int             @default(1)
+  maxQty                     Int?
+  weightGrams                Int?
+  isFeatured                 Boolean         @default(false)
+  position                   Int             @default(0)
+  images                     Json? // [{ url, alt }]
+  // Options façon Shopify (max 3) : [{ name: "Couleur", type: "color" | "size" | "text", values: [{ value: "Rouge", swatch?: "#C62828", image?: url }] }]
+  options                    Json?
+  tags                       String[]        @default([])
+  vendor                     String?
+  productType                String?
+  seoTitle                   String?
+  seoDescription             String?
+  // Contenu riche de la fiche : onglets/accordéons [{ title, body }] (composition, entretien, livraison…)
+  details                    Json?
+  // Lot 1 : produit carte cadeau (variantes = valeurs faciales, pas de suivi de stock)
+  isGiftCard                 Boolean         @default(false)
+  // Validité des cartes émises, en jours ; null = 365 (minimum 180)
+  giftCardValidityDays       Int?
+  // Vague 2 : nature du produit (défaut PHYSICAL = comportement historique). `kind = GIFT_CARD` ⇔ `isGiftCard`.
+  kind                       ProductKind     @default(PHYSICAL)
+  // DIGITAL : nombre de téléchargements par commande (null = illimité) et validité de l'accès en jours (null = sans expiration)
+  downloadLimit              Int?
+  downloadValidityDays       Int?
+  // SERVICE : durée en minutes, lieu (null = non précisé), prestation à distance, note de réservation affichée sur la fiche
+  serviceDurationMinutes     Int?
+  serviceLocation            String?
+  serviceRemote              Boolean         @default(false)
+  serviceBookingNote         String?
+  // DIGITAL et SERVICE : instructions envoyées à l'acheteur après le paiement (texte simple)
+  postPurchaseInstructions   String?
+  // Lot 2 : taxes (cartes cadeaux : `exempt` imposé par l'action)
+  taxable                    Boolean         @default(true)
+  taxCategory                String          @default("standard") // standard | reduced | exempt
+  // Lot 4 : modèle alternatif (ThemeDocument.alternates.product[suffix]) ; null = modèle par défaut
+  templateSuffix             String?
+  createdAt                  DateTime        @default(now())
+  updatedAt                  DateTime        @updatedAt
+
+  store           Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  category        Category?           @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  variants        Variant[]
+  optionGroups    OptionGroup[]
+  cartItems       CartItem[]
+  orderItems      OrderItem[]
+  inventoryMoves  InventoryMovement[]
+  reviews         Review[]
+  favorites       CustomerFavorite[]
+  prices          ProductPrice[]
+  digitalAssets   DigitalAsset[]
+  inventoryLevels InventoryLevel[]
+
+  @@unique([storeId, slug])
+  @@index([storeId, status])
+}
+
+// Variante = combinaison d'attributs (ex. Taille M / Rouge) avec prix et stock propres
+model Variant {
+  id              String              @id @default(cuid())
+  productId       String
+  name            String // "M / Rouge"
+  attributes      Json // { "Taille": "M", "Couleur": "Rouge" }
+  price           Int?
+  compareAtPrice  Int?
+  sku             String?
+  barcode         String?
+  weightGrams     Int?
+  imageUrl        String? // photo propre à la variante (couleur)
+  available       Boolean             @default(true)
+  stock           Int                 @default(0)
+  inventoryPolicy InventoryPolicy     @default(DENY)
+  position        Int                 @default(0)
+  product         Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  cartItems       CartItem[]
+  orderItems      OrderItem[]
+  inventoryMoves  InventoryMovement[]
+  digitalAssets   DigitalAsset[]
+  inventoryLevels InventoryLevel[]
+
+  @@index([productId])
+}
+
+// Suppléments / options (ex. sauce, taille de portion) — obligatoires ou non
+model OptionGroup {
+  id        String   @id @default(cuid())
+  productId String
+  name      String
+  required  Boolean  @default(false)
+  minSelect Int      @default(0)
+  maxSelect Int      @default(1)
+  position  Int      @default(0)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  options   Option[]
+}
+
+model Option {
+  id         String      @id @default(cuid())
+  groupId    String
+  name       String
+  priceDelta Int         @default(0)
+  position   Int         @default(0)
+  group      OptionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+}
+
+enum InventoryReason {
+  ADJUSTMENT
+  SALE
+  CANCEL
+  RETURN
+  IMPORT
+  // Lot 3 : transfert entre dépôts (sortie), réception au dépôt destination, inventaire tournant
+  TRANSFER
+  RECEIVE
+  COUNT
+}
+
+model InventoryMovement {
+  id         String          @id @default(cuid())
+  storeId    String
+  productId  String
+  variantId  String?
+  delta      Int
+  reason     InventoryReason
+  note       String?
+  orderId    String?
+  actorId    String?
+  // Lot 3 : dépôt concerné par le mouvement (null = mouvement antérieur aux dépôts)
+  locationId String?
+  createdAt  DateTime        @default(now())
+  store      Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product    Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant    Variant?        @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  location   Location?       @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  @@index([storeId, productId])
+  @@index([storeId, locationId, createdAt])
+}
+
+// ─────────────────────────── Vente ───────────────────────────
+
+model Cart {
+  id                String     @id @default(cuid())
+  storeId           String
+  token             String     @unique
+  items             CartItem[]
+  couponCode        String?
+  // Pour le lien wa.me : on journalise le clic, jamais l'envoi
+  whatsappClickedAt DateTime?
+  convertedOrderId  String?
+  // Lot 1 : offres ajoutées, source (lot 4)
+  attribution       Json?
+  // Lot 2 : langue d'affichage et cotation de change verrouillée 15 min au checkout { currency, rate, expiresAt }
+  locale            String?
+  fxQuote           Json?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  store             Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, updatedAt])
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  cartId    String
+  productId String
+  variantId String?
+  quantity  Int
+  options   Json? // [{ groupId, optionId, name, priceDelta }]
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant   Variant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@index([cartId])
+}
+
+model Customer {
+  id                 String          @id @default(cuid())
+  storeId            String
+  name               String
+  phone              String
+  email              String?
+  address            String?
+  notes              String?
+  tags               String[]        @default([])
+  ordersCount        Int             @default(0)
+  totalSpent         Int             @default(0)
+  lastOrderAt        DateTime?
+  loyaltyPoints      Int             @default(0)
+  // Lot 1 : compte acheteur (connexion par code) et avoir
+  phoneVerifiedAt    DateTime?
+  emailVerifiedAt    DateTime?
+  lastLoginAt        DateTime?
+  // Solde d'avoir dénormalisé (journal : StoreCreditTransaction), décrément conditionnel uniquement
+  storeCreditBalance Int             @default(0)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  store              Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  orders             Order[]
+  consents           Consent[]
+  conversations      Conversation[]
+  loyaltyLedger      LoyaltyLedger[]
+
+  otps                    CustomerOtp[]
+  sessions                CustomerSession[]
+  addresses               CustomerAddress[]
+  favorites               CustomerFavorite[]
+  giftCards               GiftCard[]
+  storeCreditTransactions StoreCreditTransaction[]
+  returnRequests          ReturnRequest[]
+  downloadGrants          DownloadGrant[]
+
+  @@unique([storeId, phone])
+  @@index([storeId, lastOrderAt])
+  @@index([storeId, email])
+}
+
+enum ConsentChannel {
+  WHATSAPP
+  SMS
+  EMAIL
+  PUSH // lot 4 : notifications push (marketing uniquement avec ce consentement)
+}
+
+enum ConsentPurpose {
+  TRANSACTIONAL
+  MARKETING
+}
+
+model Consent {
+  id         String         @id @default(cuid())
+  customerId String
+  channel    ConsentChannel
+  purpose    ConsentPurpose
+  granted    Boolean
+  source     String // checkout | import | manual
+  createdAt  DateTime       @default(now())
+  customer   Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+}
+
+enum OrderStatus {
+  NEW
+  CONFIRMED
+  PREPARING
+  READY
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PENDING
+  PAID
+  PARTIALLY_REFUNDED
+  REFUNDED
+  FAILED
+}
+
+enum FulfillmentType {
+  PICKUP
+  DELIVERY
+  WHATSAPP
+  DIGITAL // lot 1 : panier composé uniquement de cartes cadeaux (sans livraison)
+}
+
+enum OrderChannel {
+  STORE
+  WHATSAPP
+  MANUAL
+  // Lot 3 : vente encaissée à la caisse en magasin
+  POS
+}
+
+model Order {
+  id                String          @id @default(cuid())
+  storeId           String
+  customerId        String?
+  reference         String // ex. AX-7K3P9Q (unique par boutique)
+  idempotencyKey    String?
+  trackingToken     String          @unique
+  trackingExpiresAt DateTime
+  status            OrderStatus     @default(NEW)
+  paymentStatus     PaymentStatus   @default(UNPAID)
+  fulfillmentType   FulfillmentType
+  channel           OrderChannel    @default(STORE)
+
+  // Instantané client
+  customerName     String
+  customerPhone    String
+  customerEmail    String?
+  deliveryAddress  String?
+  deliveryZoneId   String?
+  deliveryZoneName String?
+  pickupSlotId     String?
+  scheduledFor     DateTime?
+  customerNote     String?
+
+  // Montants (recalculés côté serveur)
+  currency    String
+  subtotal    Int
+  discount    Int     @default(0)
+  deliveryFee Int     @default(0)
+  total       Int
+  couponCode  String?
+
+  // Lot 1 : détail des remises et moyens de règlement internes (tenders)
+  automaticDiscount     Int     @default(0) // part des remises automatiques incluse dans `discount`
+  loyaltyDiscount       Int     @default(0) // part fidélité incluse dans `discount`
+  loyaltyPointsRedeemed Int     @default(0)
+  giftCardAmount        Int     @default(0) // réglé par cartes cadeaux
+  storeCreditAmount     Int     @default(0) // réglé par avoir
+  amountDue             Int? // total − tenders ; null = commandes antérieures (= total)
+  buyerVerified         Boolean @default(false) // passée par un acheteur connecté par code
+  attribution           Json? // { offers?: string[], source?, experiments? } (lots 1 et 4)
+
+  // Lot 2 : langue, devise d'affichage (instantané immuable) et taxes
+  locale              String?
+  presentmentCurrency String?
+  presentmentRate     Decimal? @db.Decimal(20, 10)
+  presentmentTotal    Int?
+  presentmentAmounts  Json? // { lines, discounts, shipping, taxes } en devise d'affichage
+  taxTotal            Int      @default(0)
+  taxesIncluded       Boolean  @default(true)
+  taxLines            Json? // [{ name, rateBps, base, amount }]
+  buyerCompany        String?
+  buyerTaxId          String?
+
+  paymentMethodId    String?
+  paymentMethodLabel String?
+  paymentReference   String? // référence Mobile Money saisie par le client
+  outOfQuota         Boolean @default(false)
+  internalNote       String?
+  courierName        String?
+
+  // Lot 3 : dépôt principal, tarif d'expédition retenu, avancement de l'expédition et caisse
+  locationId        String?
+  shippingRateId    String?
+  shippingRateName  String?
+  fulfillmentStatus FulfillmentStatus @default(UNFULFILLED)
+  posSessionId      String?
+  posDeviceId       String?
+  offlineCreatedAt  DateTime?
+  priceSource       String? // server | offline_snapshot
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  confirmedAt DateTime?
+  deliveredAt DateTime?
+  cancelledAt DateTime?
+
+  store             Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer          Customer?          @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items             OrderItem[]
+  events            OrderEvent[]
+  paymentAttempts   PaymentAttempt[]
+  refunds           Refund[]
+  couponRedemptions CouponRedemption[]
+
+  discounts            OrderDiscount[]
+  giftCardTransactions GiftCardTransaction[]
+  returnRequests       ReturnRequest[]
+  invoices             OrderInvoice[]
+  downloadGrants       DownloadGrant[]
+  shipments            Shipment[]
+
+  @@unique([storeId, reference])
+  @@unique([storeId, idempotencyKey])
+  @@index([storeId, createdAt])
+  @@index([storeId, status])
+}
+
+model OrderItem {
+  id                   String          @id @default(cuid())
+  orderId              String
+  productId            String?
+  variantId            String?
+  name                 String
+  variantName          String?
+  options              Json?
+  unitPrice            Int
+  quantity             Int
+  lineTotal            Int
+  // Lot 1
+  isGiftCard           Boolean         @default(false)
+  // Vague 2 : nature du produit au moment de la vente (instantané : le produit peut changer ensuite).
+  kind                 ProductKind     @default(PHYSICAL)
+  // Part des remises de ligne et de niveau commande allouée à la ligne (plus fort reste)
+  discountAllocated    Int             @default(0)
+  // Lot 2 : taxe de la ligne (arrondi par ligne) et prix unitaire en devise d'affichage
+  taxAmount            Int             @default(0)
+  taxRateBps           Int?
+  presentmentUnitPrice Int?
+  // Lot 3 : dépôt d'affectation de la ligne (instantané)
+  locationId           String?
+  order                Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product              Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variant              Variant?        @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  returnItems          ReturnItem[]
+  downloadGrants       DownloadGrant[]
+  shipmentItems        ShipmentItem[]
+
+  @@index([orderId])
+}
+
+/**
+ * Fichier numérique vendu avec un produit (vague 2). Le fichier lui-même vit dans le stockage objet
+ * (`storageKey`, préfixe `stores/{storeId}/files/…`, jamais public) ; seule la fiche est en base.
+ * Remplacer un fichier incrémente `version` et réécrit `storageKey` : les acheteurs voient la version courante.
+ */
+model DigitalAsset {
+  id         String   @id @default(cuid())
+  storeId    String
+  productId  String
+  // null = fichier commun à toutes les variantes ; sinon fichier propre à une variante
+  variantId  String?
+  name       String
+  storageKey String
+  bytes      Int
+  mime       String
+  version    Int      @default(1)
+  position   Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  store   Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant Variant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@index([storeId, productId])
+  @@index([productId, variantId])
+}
+
+/**
+ * Accès de téléchargement d'un acheteur (vague 2) : une ligne par ligne de commande numérique, créée par le job
+ * `digital.deliver` APRÈS confirmation du paiement. Le jeton n'existe qu'en clair dans le lien envoyé à l'acheteur ;
+ * la base n'en garde que l'empreinte HMAC (`tokenHash`). Compteur incrémenté atomiquement à chaque fichier servi.
+ */
+model DownloadGrant {
+  id             String    @id @default(cuid())
+  storeId        String
+  orderId        String
+  orderItemId    String
+  customerId     String?
+  tokenHash      String    @unique
+  downloadCount  Int       @default(0)
+  // null = illimité (réglage du produit au moment de l'émission)
+  downloadLimit  Int?
+  // null = sans expiration
+  expiresAt      DateTime?
+  lastDownloadAt DateTime?
+  lastIp         String?
+  notifiedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  store     Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  order     Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  customer  Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  // Idempotence de l'émission : un seul accès par ligne de commande.
+  @@unique([orderItemId])
+  @@index([storeId, orderId])
+  @@index([customerId, createdAt])
+}
+
+// Historique immuable
+model OrderEvent {
+  id         String   @id @default(cuid())
+  orderId    String
+  actorId    String?
+  actorLabel String // "Système", "Client", nom du membre
+  type       String // status_changed | payment_changed | note | notification
+  fromValue  String?
+  toValue    String?
+  message    String?
+  createdAt  DateTime @default(now())
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, createdAt])
+}
+
+enum CouponType {
+  PERCENT
+  FIXED
+  FREE_DELIVERY
+}
+
+model Coupon {
+  id                    String             @id @default(cuid())
+  storeId               String
+  code                  String
+  type                  CouponType
+  value                 Int                @default(0)
+  minSubtotal           Int                @default(0)
+  maxUses               Int?
+  maxUsesPerCustomer    Int?               @default(1)
+  startsAt              DateTime?
+  endsAt                DateTime?
+  active                Boolean            @default(true)
+  usesCount             Int                @default(0)
+  // Lot 1
+  combinesWithAutomatic Boolean            @default(true)
+  appliesTo             Json? // { productIds?: string[], collectionIds?: string[] } ; null = tout
+  firstOrderOnly        Boolean            @default(false)
+  createdAt             DateTime           @default(now())
+  store                 Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  redemptions           CouponRedemption[]
+  orderDiscounts        OrderDiscount[]
+
+  @@unique([storeId, code])
+}
+
+model CouponRedemption {
+  id        String   @id @default(cuid())
+  couponId  String
+  orderId   String
+  phone     String
+  amount    Int
+  createdAt DateTime @default(now())
+  coupon    Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([couponId, phone])
+}
+
+// ─────────────────────────── Paiement ───────────────────────────
+
+enum PaymentMethodKind {
+  CASH_ON_DELIVERY
+  MOBILE_MONEY_MANUAL
+  BANK_TRANSFER_MANUAL
+  GATEWAY
+}
+
+model PaymentMethod {
+  id                   String            @id @default(cuid())
+  storeId              String
+  kind                 PaymentMethodKind
+  // GATEWAY uniquement : fedapay | kkiapay | paydunya | stripe ; lot 1 bis (agrégateurs Wave / Orange Money) : paystack | pawapay | cinetpay
+  provider             String?
+  label                String
+  instructions         String? // ex. "Envoyez sur MTN MoMo 97 00 00 00 (Nom)"
+  accountNumber        String?
+  accountName          String?
+  active               Boolean           @default(true)
+  position             Int               @default(0)
+  // Clés secrètes : jamais en clair côté client. Chiffrées au repos (src/lib/crypto.ts).
+  credentialsEncrypted String?
+  // Lot 1 bis : portefeuilles proposés via l'agrégateur (GATEWAY), ex. ["wave", "orange_money", "mtn_momo", "moov_money", "card"].
+  // Vide = choix laissé à la page de paiement du fournisseur (comportement antérieur).
+  channels             String[]          @default([])
+  // Lot 2 : devises encaissables par ce moyen ; vide = devise de la boutique uniquement
+  currencies           String[]          @default([])
+  createdAt            DateTime          @default(now())
+  store                Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  attempts             PaymentAttempt[]
+
+  @@index([storeId])
+}
+
+enum PaymentAttemptStatus {
+  CREATED
+  PENDING
+  INITIATED
+  CONFIRMED
+  FAILED
+  EXPIRED
+}
+
+model PaymentAttempt {
+  id              String               @id @default(cuid())
+  orderId         String
+  paymentMethodId String?
+  provider        String // manual | cash | fedapay | ...
+  providerRef     String? // id de transaction chez le fournisseur
+  status          PaymentAttemptStatus @default(CREATED)
+  amount          Int
+  currency        String
+  customerRef     String? // référence saisie par le client (MoMo)
+  // Lot 1 bis : portefeuille choisi (wave | orange_money | …) et numéro débité (E.164 sans « + ») pour les
+  // flux sans redirection (demande de paiement poussée sur le téléphone, ex. PawaPay). Jamais une preuve de paiement.
+  channel         String?
+  payerPhone      String?
+  verifiedBy      String? // userId du marchand qui a confirmé (manuel)
+  verifiedAt      DateTime?
+  failureReason   String?
+  metadata        Json?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  order           Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  paymentMethod   PaymentMethod?       @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  providerEvents  ProviderEvent[]
+
+  @@index([orderId])
+  @@index([provider, providerRef])
+}
+
+// Événement brut reçu d'un fournisseur (webhook) — idempotent par (provider, eventId)
+model ProviderEvent {
+  id               String          @id @default(cuid())
+  provider         String
+  eventId          String
+  type             String
+  payload          Json
+  signatureValid   Boolean
+  processedAt      DateTime?
+  error            String?
+  paymentAttemptId String?
+  receivedAt       DateTime        @default(now())
+  paymentAttempt   PaymentAttempt? @relation(fields: [paymentAttemptId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, eventId])
+}
+
+enum RefundStatus {
+  REQUESTED
+  PROCESSING
+  DONE
+  REJECTED
+}
+
+model Refund {
+  id        String       @id @default(cuid())
+  orderId   String
+  amount    Int
+  reason    String?
+  status    RefundStatus @default(REQUESTED)
+  actorId   String?
+  createdAt DateTime     @default(now())
+  doneAt    DateTime?
+  // Lot 1 : original | store_credit ; returnId = référence logique vers ReturnRequest
+  method    String       @default("original")
+  returnId  String?
+  order     Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+// ─────────────────────────── Livraison ───────────────────────────
+
+model DeliveryZone {
+  id         String            @id @default(cuid())
+  storeId    String
+  name       String // "Cotonou — Akpakpa"
+  fee        Int
+  freeAbove  Int?
+  etaLabel   String? // "Sous 24 h"
+  // Lot 2 : pays de taxation (ISO 3166-1 alpha-2) ; null = pays de la boutique
+  country    String?
+  active     Boolean           @default(true)
+  position   Int               @default(0)
+  // Lot 3 : dépôt qui sert la zone (priorité 1 de l'affectation des commandes)
+  locationId String?
+  store      Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  addresses  CustomerAddress[]
+  location   Location?         @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  rates      ShippingRate[]
+
+  @@index([storeId])
+}
+
+model PickupSlot {
+  id        String  @id @default(cuid())
+  storeId   String
+  dayOfWeek Int // 0 = dimanche
+  startTime String // "09:00"
+  endTime   String // "12:00"
+  capacity  Int? // commandes max par créneau
+  active    Boolean @default(true)
+  store     Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+}
+
+// ─────────────────────────── SaaS ───────────────────────────
+
+enum PlanId {
+  FREE
+  STARTER
+  BUSINESS
+  SCALE
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+}
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+}
+
+model Subscription {
+  id                     String             @id @default(cuid())
+  storeId                String             @unique
+  planId                 PlanId             @default(FREE)
+  zone                   String             @default("WORLD") // WORLD (EUR) | AFRICA (FCFA)
+  currency               String             @default("EUR")
+  status                 SubscriptionStatus @default(TRIALING)
+  interval               BillingInterval    @default(MONTHLY)
+  trialEndsAt            DateTime?
+  currentPeriodStart     DateTime           @default(now())
+  currentPeriodEnd       DateTime?
+  cancelAtPeriodEnd      Boolean            @default(false)
+  provider               String? // point d'intégration facturation plateforme
+  providerCustomerId     String?
+  providerSubscriptionId String?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  store                  Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  invoices               Invoice[]
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  VOID
+  UNCOLLECTIBLE
+}
+
+model Invoice {
+  id             String        @id @default(cuid())
+  subscriptionId String
+  number         String        @unique
+  planId         PlanId
+  amount         Int
+  currency       String        @default("XOF")
+  status         InvoiceStatus @default(OPEN)
+  periodStart    DateTime
+  periodEnd      DateTime
+  dueAt          DateTime
+  paidAt         DateTime?
+  providerRef    String?
+  createdAt      DateTime      @default(now())
+  subscription   Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId])
+}
+
+model UsageCounter {
+  id      String @id @default(cuid())
+  storeId String
+  metric  String // orders | whatsapp_messages | ai_credits
+  period  String // "2026-10"
+  value   Int    @default(0)
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, metric, period])
+}
+
+// ─────────────────────────── Opérations ───────────────────────────
+
+model Integration {
+  id               String   @id @default(cuid())
+  storeId          String
+  kind             String // whatsapp_cloud | meta_pixel | custom_domain
+  // WhatsApp Cloud : identifiant Meta du numéro, unique sur la plateforme (routage des webhooks)
+  phoneNumberId    String?  @unique
+  status           String   @default("inactive") // inactive | pending | active | error
+  config           Json?
+  secretsEncrypted String?
+  lastError        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  store            Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, kind])
+}
+
+model Automation {
+  id           String   @id @default(cuid())
+  storeId      String
+  trigger      String // order.created | order.ready | order.delivered | cart.abandoned
+  channel      String // whatsapp | email
+  delayMinutes Int      @default(0)
+  template     String
+  active       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  store        Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  FAILED
+  SKIPPED
+}
+
+model Notification {
+  id        String             @id @default(cuid())
+  storeId   String
+  channel   String // email | whatsapp | sms | inapp
+  recipient String
+  template  String
+  payload   Json?
+  status    NotificationStatus @default(QUEUED)
+  error     String?
+  attempts  Int                @default(0)
+  sentAt    DateTime?
+  createdAt DateTime           @default(now())
+  store     Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, status])
+}
+
+// Outbox transactionnelle : tout événement métier est écrit dans la même transaction que la donnée.
+enum JobStatus {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+  DEAD
+}
+
+model Job {
+  id          String    @id @default(cuid())
+  storeId     String?
+  type        String // order.created | payment.succeeded | notification.send | ...
+  payload     Json
+  status      JobStatus @default(PENDING)
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  runAt       DateTime  @default(now())
+  lockedAt    DateTime?
+  lastError   String?
+  createdAt   DateTime  @default(now())
+  store       Store?    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([status, runAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  storeId   String?
+  actorId   String?
+  action    String // store.suspended | member.role_changed | payment.confirmed ...
+  target    String?
+  metadata  Json?
+  ip        String?
+  createdAt DateTime @default(now())
+  store     Store?   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([storeId, createdAt])
+  @@index([actorId])
+}
+
+enum TicketStatus {
+  OPEN
+  PENDING
+  RESOLVED
+  CLOSED
+}
+
+model SupportTicket {
+  id        String       @id @default(cuid())
+  storeId   String?
+  userId    String?
+  email     String
+  subject   String
+  message   String
+  status    TicketStatus @default(OPEN)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  store     Store?       @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  user      User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+}
+
+// Inscription à la newsletter / liste d'attente (site vitrine)
+model Lead {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  source    String   @default("site")
+  createdAt DateTime @default(now())
+}
+
+// ─────────────────────────── V4 : options, crédits, conversation, marketing ───────────────────────────
+
+enum AddOnStatus {
+  PENDING
+  ACTIVE
+  CANCELLED
+  EXPIRED
+}
+
+// Achat d'une option payante (membre en plus, pack de messages, domaine…). Catalogue : src/config/plans.ts
+model AddOnPurchase {
+  id        String      @id @default(cuid())
+  storeId   String
+  addOnId   String
+  quantity  Int         @default(1)
+  unitPrice Int
+  currency  String
+  status    AddOnStatus @default(PENDING)
+  invoiceId String?
+  startsAt  DateTime    @default(now())
+  endsAt    DateTime?
+  createdAt DateTime    @default(now())
+  store     Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, status])
+}
+
+enum CreditType {
+  WA_UTILITY
+  WA_MARKETING
+  AI
+}
+
+// Portefeuille de crédits : mouvements en ajout seul (solde = somme des deltas non expirés)
+model CreditLedger {
+  id        String     @id @default(cuid())
+  storeId   String
+  type      CreditType
+  delta     Int
+  reason    String // plan_monthly | pack_purchase | usage | expiration | refund | admin
+  reference String?
+  expiresAt DateTime?
+  createdAt DateTime   @default(now())
+  store     Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, type, createdAt])
+}
+
+enum ConversationStage {
+  NEW
+  INTERESTED
+  ORDERING
+  PAID
+  LOST
+}
+
+enum ConversationStatus {
+  OPEN
+  PENDING
+  CLOSED
+}
+
+// Boîte de réception WhatsApp partagée + entonnoir de vente
+model Conversation {
+  id             String             @id @default(cuid())
+  storeId        String
+  customerId     String?
+  phone          String
+  name           String
+  channel        String             @default("whatsapp") // whatsapp | instagram | facebook
+  status         ConversationStatus @default(OPEN)
+  stage          ConversationStage  @default(NEW)
+  labels         String[]           @default([])
+  assignedToId   String?
+  unreadCount    Int                @default(0)
+  lastMessageAt  DateTime           @default(now())
+  lastPreview    String?
+  estimatedValue Int?
+  createdAt      DateTime           @default(now())
+  store          Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer       Customer?          @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  assignedTo     User?              @relation("ConversationAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  messages       Message[]
+
+  @@unique([storeId, phone, channel])
+  @@index([storeId, status, lastMessageAt])
+  @@index([storeId, stage])
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+  NOTE
+}
+
+enum MessageStatus {
+  RECEIVED
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  LINK_ONLY
+}
+
+model Message {
+  id             String           @id @default(cuid())
+  conversationId String
+  direction      MessageDirection
+  body           String
+  status         MessageStatus    @default(QUEUED)
+  authorId       String?
+  orderId        String?
+  providerRef    String?
+  error          String?
+  // Pièce jointe (image) : URL dans le stockage de la boutique + type MIME court ("image").
+  attachmentUrl  String?
+  attachmentType String?
+  createdAt      DateTime         @default(now())
+  conversation   Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  author         User?            @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt])
+}
+
+model QuickReply {
+  id        String   @id @default(cuid())
+  storeId   String
+  shortcut  String
+  body      String
+  createdAt DateTime @default(now())
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, shortcut])
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  CANCELLED
+}
+
+model Campaign {
+  id                String         @id @default(cuid())
+  storeId           String
+  name              String
+  channel           String         @default("whatsapp")
+  segment           Json? // { kind: "all" | "loyal" | "inactive" | "new" | "tag", tag? }
+  message           String
+  status            CampaignStatus @default(DRAFT)
+  recipients        Int            @default(0)
+  sentCount         Int            @default(0)
+  failedCount       Int            @default(0)
+  clicks            Int            @default(0)
+  ordersAttributed  Int            @default(0)
+  revenueAttributed Int            @default(0)
+  creditsUsed       Int            @default(0)
+  scheduledAt       DateTime?
+  sentAt            DateTime?
+  createdAt         DateTime       @default(now())
+  store             Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, status])
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Review {
+  id           String       @id @default(cuid())
+  storeId      String
+  productId    String?
+  orderId      String?
+  customerName String
+  rating       Int
+  body         String
+  status       ReviewStatus @default(PENDING)
+  reply        String?
+  createdAt    DateTime     @default(now())
+  store        Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product      Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@unique([orderId, productId])
+  @@index([storeId, status])
+  @@index([productId, status])
+}
+
+model LoyaltyLedger {
+  id         String   @id @default(cuid())
+  storeId    String
+  customerId String
+  delta      Int
+  reason     String // order | reward | adjustment | refund | expiration
+  orderId    String?
+  createdAt  DateTime @default(now())
+  store      Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, customerId])
+}
+
+// Pages personnalisées de la boutique (FAQ, à propos, conditions)
+model StorePage {
+  id             String   @id @default(cuid())
+  storeId        String
+  slug           String
+  title          String
+  body           String
+  published      Boolean  @default(true)
+  position       Int      @default(0)
+  // Lot 4 : modèle alternatif (ThemeDocument.alternates.page[suffix]) ; null = modèle par défaut
+  templateSuffix String?
+  updatedAt      DateTime @updatedAt
+  store          Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, slug])
+}
+
+// Limitation de débit (fenêtre fixe) pour les entrées publiques et l'authentification
+model RateLimit {
+  key       String   @id // ex. "login:ip:1.2.3.4" ou "reset:email:x@y.z"
+  count     Int      @default(0)
+  resetAt   DateTime
+  updatedAt DateTime @updatedAt
+
+  @@index([resetAt])
+}
+
+// ─────────────────────────── Console super-administrateur ───────────────────────────
+
+// Surcharge des prix du catalogue (src/config/plans.ts) sans déploiement, avec historique
+model PriceOverride {
+  id        String   @id @default(cuid())
+  itemType  String // plan | addon
+  itemId    String // FREE | STARTER | … ou id d'option
+  zone      String // WORLD | AFRICA
+  amount    Int // EUR en centimes, XOF entier
+  active    Boolean  @default(true)
+  note      String?
+  actorId   String?
+  createdAt DateTime @default(now())
+
+  @@index([itemType, itemId, zone, active])
+}
+
+// Codes promo appliqués aux abonnements et options (lancement, partenaires, revendeurs)
+model SaasCoupon {
+  id             String    @id @default(cuid())
+  code           String    @unique
+  description    String?
+  percentOff     Int? // 1..100
+  amountOff      Int? // dans la devise de la zone
+  zone           String? // null = toutes zones
+  plans          String[]  @default([]) // vide = tous les plans payants
+  durationMonths Int       @default(1) // nombre de factures concernées
+  maxRedemptions Int?
+  redemptions    Int       @default(0)
+  expiresAt      DateTime?
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+}
+
+// Signalements d'abus (boutique frauduleuse, contenu interdit) depuis la boutique publique
+model StoreReport {
+  id            String   @id @default(cuid())
+  storeId       String
+  reason        String // fraud | prohibited | counterfeit | spam | other
+  message       String?
+  reporterEmail String?
+  status        String   @default("OPEN") // OPEN | REVIEWING | RESOLVED | DISMISSED
+  resolution    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([storeId])
+}
+
+// Annonces de la plateforme affichées dans l'espace marchand
+model Announcement {
+  id        String    @id @default(cuid())
+  title     String
+  body      String
+  tone      String    @default("info") // info | success | warning
+  audience  String    @default("all") // all | free | paid | zone:AFRICA | zone:WORLD
+  startsAt  DateTime  @default(now())
+  endsAt    DateTime?
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+}
+
+// Paramètres plateforme modifiables depuis la console (clé/valeur)
+model PlatformSetting {
+  key       String   @id
+  value     Json
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+}
+
+// Historique des versions de thème (restauration, V4 §11)
+model ThemeVersion {
+  id          String    @id @default(cuid())
+  storeId     String
+  label       String?
+  document    Json
+  publishedAt DateTime?
+  actorId     String?
+  createdAt   DateTime  @default(now())
+
+  @@index([storeId, createdAt])
+}
+
+// Menus de navigation de la boutique (en-tête, pied de page)
+model StoreMenu {
+  id        String   @id @default(cuid())
+  storeId   String
+  handle    String // main | footer | legal
+  // [{ label, type: "collection" | "product" | "page" | "url" | "home" | "catalog", target?, children?: [...] }]
+  items     Json
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeId, handle])
+}
+
+// ─────────────────────────── Connecteurs IA (MCP, jetons API, OAuth 2.1) ───────────────────────────
+// Référence : docs/API-MCP.md. Aucun secret en clair : seuls des hachages SHA-256 sont stockés.
+
+// Jeton API d'une boutique (« axi_live_… »), affiché une seule fois à la création
+model ApiToken {
+  id          String    @id @default(cuid())
+  storeId     String
+  name        String
+  // Préfixe visible (identification dans l'interface et recherche), ex. « axi_live_k3P9qZ2m »
+  prefix      String
+  secretHash  String    @unique
+  scopes      String[]
+  createdById String?
+  lastUsedAt  DateTime?
+  lastUsedIp  String?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  store       Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdBy   User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([prefix])
+  @@index([storeId, revokedAt])
+}
+
+// Client OAuth enregistré dynamiquement (RFC 7591) : Claude, ChatGPT, Cursor…
+model OAuthClient {
+  id               String                   @id @default(cuid())
+  clientId         String                   @unique
+  // Client confidentiel facultatif (client_secret_post / basic) : hachage seulement
+  clientSecretHash String?
+  name             String
+  redirectUris     String[]
+  clientUri        String?
+  logoUri          String?
+  softwareId       String?
+  disabledAt       DateTime?
+  lastUsedAt       DateTime?
+  createdAt        DateTime                 @default(now())
+  codes            OAuthAuthorizationCode[]
+  grants           OAuthGrant[]
+}
+
+// Code d'autorisation : haché, 60 s, usage unique, PKCE S256 obligatoire
+model OAuthAuthorizationCode {
+  id            String      @id @default(cuid())
+  codeHash      String      @unique
+  clientId      String
+  userId        String
+  storeId       String
+  scopes        String[]
+  redirectUri   String
+  codeChallenge String
+  resource      String?
+  expiresAt     DateTime
+  usedAt        DateTime?
+  grantId       String?
+  createdAt     DateTime    @default(now())
+  client        OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store         Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+}
+
+// Autorisation accordée (utilisateur, boutique, application, scopes) ; porte les jetons d'accès et de rafraîchissement
+model OAuthGrant {
+  id         String       @id @default(cuid())
+  clientId   String
+  userId     String
+  storeId    String
+  scopes     String[]
+  resource   String?
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  client     OAuthClient  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store      Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  tokens     OAuthToken[]
+
+  @@index([storeId, revokedAt])
+  @@index([clientId, userId, storeId])
+}
+
+// Jeton OAuth (kind = access | refresh), haché ; un refresh consommé (usedAt) ne sert qu'une fois (rotation)
+model OAuthToken {
+  id        String     @id @default(cuid())
+  grantId   String
+  kind      String
+  tokenHash String     @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  revokedAt DateTime?
+  createdAt DateTime   @default(now())
+  grant     OAuthGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+
+  @@index([grantId])
+  @@index([expiresAt])
+}
+
+// Journal léger des appels MCP (outil, acteur, statut, durée) ; purgé après 30 jours
+model ApiRequestLog {
+  id         String   @id @default(cuid())
+  storeId    String
+  tokenId    String?
+  grantId    String?
+  actorLabel String
+  method     String
+  tool       String?
+  status     String // ok | error | denied | rate_limited
+  errorCode  Int?
+  durationMs Int
+  ip         String?
+  createdAt  DateTime @default(now())
+  store      Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, createdAt])
+  @@index([createdAt])
+}
+
+// ─────────────────────────── Plateforme d'applications (App Store) ───────────────────────────
+// Catalogue d'apps/plugins installables par les marchands (façon Shopify). S'appuie sur l'OAuth
+// existant : une app qui appelle l'API référence un OAuthClient ; une installation porte les scopes
+// accordés et, le cas échéant, le grant OAuth qui détient les jetons. Voir docs/ARCHITECTURE.md.
+
+enum AppStatus {
+  DRAFT // en cours de création par le développeur
+  IN_REVIEW // soumise à la plateforme
+  PUBLISHED // approuvée et visible au catalogue (si listed)
+  SUSPENDED // retirée par la plateforme
+}
+
+enum AppPricingType {
+  FREE
+  SUBSCRIPTION
+  ONE_TIME
+}
+
+enum AppInstallStatus {
+  ACTIVE
+  SUSPENDED
+  UNINSTALLED
+}
+
+model App {
+  id              String            @id @default(cuid())
+  slug            String            @unique
+  name            String
+  tagline         String?
+  description     String? // markdown (fiche détaillée)
+  iconUrl         String?
+  category        String // marketing | ventes | logistique | analytics | design | ia | fidelite | support | autre
+  developerName   String
+  // Propriétaire côté portail développeur. null = app first-party de la plateforme.
+  developerUserId String?
+  firstParty      Boolean           @default(false)
+  status          AppStatus         @default(DRAFT)
+  listed          Boolean           @default(false) // visible dans le catalogue public
+  requestedScopes String[] // scopes demandés à l'installation (sous-ensemble de SCOPES)
+  appUrl          String? // page embarquée (iframe) dans l'espace marchand
+  webhookUrl      String? // endpoint d'événements de cycle de vie (install/uninstall)
+  supportUrl      String?
+  pricingType     AppPricingType    @default(FREE)
+  priceAmount     Int               @default(0) // XOF, 0 = gratuit
+  priceInterval   String? // month | year (si SUBSCRIPTION)
+  trialDays       Int               @default(0)
+  // Identité technique OAuth (si l'app appelle l'API). Unique : une app = un client au plus.
+  oauthClientId   String?           @unique
+  installCount    Int               @default(0)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  developer       User?             @relation("AppDeveloper", fields: [developerUserId], references: [id], onDelete: SetNull)
+  installs        AppInstallation[]
+
+  @@index([listed, category])
+  @@index([developerUserId])
+  @@index([status])
+}
+
+enum CollaboratorStatus {
+  PENDING
+  ACTIVE
+  REVOKED
+}
+
+// Développeur invité par le propriétaire d'une boutique (équivalent « collaborateur » Shopify) :
+// peut installer ses applications en test sur cette boutique et l'utiliser comme boutique de
+// développement, sans devenir membre de l'équipe. Invitation par e-mail, jeton haché, expirante.
+model StoreCollaborator {
+  id          String             @id @default(cuid())
+  storeId     String
+  email       String
+  userId      String?
+  status      CollaboratorStatus @default(PENDING)
+  permissions String[] // ex. apps.test_install, apps.manage_installs
+  message     String?
+  tokenHash   String             @unique
+  invitedById String?
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  store       Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user        User?              @relation("CollaboratorUser", fields: [userId], references: [id], onDelete: SetNull)
+  invitedBy   User?              @relation("CollaboratorInviter", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  @@unique([storeId, email])
+  @@index([userId, status])
+}
+
+model AppInstallation {
+  id            String           @id @default(cuid())
+  appId         String
+  storeId       String
+  status        AppInstallStatus @default(ACTIVE)
+  grantedScopes String[]
+  installedById String?
+  // Grant OAuth associé (détient les jetons d'accès/rafraîchissement) si l'app appelle l'API.
+  oauthGrantId  String?
+  config        Json?
+  // Facturation de l'app (phase D). billingStatus : none | trialing | active | past_due | cancelled
+  priceAmount   Int              @default(0)
+  billingStatus String?
+  trialEndsAt   DateTime?
+  installedAt   DateTime         @default(now())
+  uninstalledAt DateTime?
+  app           App              @relation(fields: [appId], references: [id], onDelete: Cascade)
+  store         Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  installedBy   User?            @relation("AppInstalledBy", fields: [installedById], references: [id], onDelete: SetNull)
+
+  @@unique([appId, storeId])
+  @@index([storeId, status])
+  @@index([appId])
+}
+
+// ─────────────────────────── Lot 1 : ventes et fidélité ───────────────────────────
+// Spécification : docs/specs/LOT-1-ventes-fidelite.md (§5). Toutes les tables portent storeId
+// (sauf lignes et journal de retour, rattachés à ReturnRequest) et sont filtrées côté serveur.
+
+enum OtpChannel {
+  WHATSAPP
+  SMS
+  EMAIL
+}
+
+enum DiscountKind {
+  PRODUCT_AMOUNT
+  BUY_X_GET_Y
+  CART_TIER
+  BUNDLE
+}
+
+enum CartOfferPlacement {
+  PRODUCT
+  CART
+  CHECKOUT
+}
+
+enum GiftCardStatus {
+  ACTIVE
+  DISABLED
+  EXPIRED
+}
+
+enum GiftCardSource {
+  PURCHASE
+  MANUAL
+  REFUND
+  RETURN
+}
+
+enum GiftCardTxKind {
+  ISSUE
+  REDEEM
+  REVERSAL
+  ADJUST
+  EXPIRE
+  REACTIVATE
+}
+
+enum StoreCreditTxKind {
+  GRANT
+  REDEEM
+  REVERSAL
+  ADJUST
+  REFUND_TO_CREDIT
+}
+
+enum ReturnStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  RECEIVED
+  RESOLVED
+  CANCELLED
+}
+
+enum ReturnResolution {
+  NONE
+  REFUND
+  STORE_CREDIT
+  EXCHANGE
+}
+
+// Code de connexion acheteur : HMAC-SHA256 (clé dérivée « buyer-otp »), 10 min, 5 essais
+model CustomerOtp {
+  id          String     @id @default(cuid())
+  storeId     String
+  customerId  String?
+  channel     OtpChannel
+  destination String // E.164 sans '+' ou e-mail en minuscules
+  codeHash    String
+  attempts    Int        @default(0)
+  expiresAt   DateTime
+  usedAt      DateTime?
+  ip          String? // purgée à 30 jours
+  createdAt   DateTime   @default(now())
+  store       Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer    Customer?  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, destination, createdAt])
+  @@index([expiresAt])
+}
+
+// Session acheteur (cookie axi_buyer) : seul le sha256 du jeton est stocké ; liée à une boutique
+model CustomerSession {
+  id         String    @id @default(cuid())
+  storeId    String
+  customerId String
+  tokenHash  String    @unique
+  userAgent  String?
+  ip         String?
+  expiresAt  DateTime
+  lastSeenAt DateTime  @default(now())
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  store      Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@index([storeId, expiresAt])
+}
+
+model CustomerAddress {
+  id             String        @id @default(cuid())
+  storeId        String
+  customerId     String
+  label          String? // Maison, Bureau
+  recipientName  String?
+  phone          String?
+  address        String
+  landmark       String?
+  city           String?
+  deliveryZoneId String?
+  isDefault      Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  store          Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer       Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  deliveryZone   DeliveryZone? @relation(fields: [deliveryZoneId], references: [id], onDelete: SetNull)
+
+  @@index([customerId])
+}
+
+model CustomerFavorite {
+  id         String   @id @default(cuid())
+  storeId    String
+  customerId String
+  productId  String
+  createdAt  DateTime @default(now())
+  store      Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, productId])
+  @@index([storeId, productId])
+}
+
+model AutomaticDiscount {
+  id                         String          @id @default(cuid())
+  storeId                    String
+  title                      String // affiché à l'acheteur
+  kind                       DiscountKind
+  config                     Json // src/lib/discounts/schema.ts (union discriminée par kind)
+  priority                   Int             @default(0)
+  combinesWithCoupons        Boolean         @default(true)
+  combinesWithOtherAutomatic Boolean         @default(true)
+  startsAt                   DateTime?
+  endsAt                     DateTime?
+  active                     Boolean         @default(true)
+  maxUses                    Int?
+  usesCount                  Int             @default(0)
+  createdAt                  DateTime        @default(now())
+  updatedAt                  DateTime        @updatedAt
+  store                      Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  applications               OrderDiscount[]
+  cartOffers                 CartOffer[]
+
+  @@index([storeId, active])
+}
+
+// Remise appliquée à une commande (instantané : libellé et montant figés)
+model OrderDiscount {
+  id                  String             @id @default(cuid())
+  orderId             String
+  storeId             String
+  source              String // automatic | coupon | loyalty
+  automaticDiscountId String?
+  couponId            String?
+  label               String
+  amount              Int
+  allocations         Json? // [{ lineIndex, orderItemId?, amount }]
+  createdAt           DateTime           @default(now())
+  order               Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  store               Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  automaticDiscount   AutomaticDiscount? @relation(fields: [automaticDiscountId], references: [id], onDelete: SetNull)
+  coupon              Coupon?            @relation(fields: [couponId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([storeId, automaticDiscountId])
+}
+
+// Vente croisée (mode add) ou montée en gamme (mode replace)
+model CartOffer {
+  id                   String             @id @default(cuid())
+  storeId              String
+  title                String
+  placement            CartOfferPlacement
+  mode                 String             @default("add") // add | replace
+  triggerProductIds    String[]           @default([])
+  triggerCollectionIds String[]           @default([])
+  offerProductIds      String[]
+  automaticDiscountId  String?
+  position             Int                @default(0)
+  active               Boolean            @default(true)
+  conversions          Int                @default(0)
+  revenue              Int                @default(0)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  store                Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  automaticDiscount    AutomaticDiscount? @relation(fields: [automaticDiscountId], references: [id], onDelete: SetNull)
+
+  @@index([storeId, active, placement])
+}
+
+// Carte cadeau : le code en clair n'est jamais stocké (hachage pour la recherche, chiffré pour le renvoi)
+model GiftCard {
+  id                String                @id @default(cuid())
+  storeId           String
+  codeHash          String                @unique // HMAC-SHA256(clé « giftcard » dérivée d'APP_SECRET, storeId:code)
+  codeEnc           String // encryptSecret(code) : renvoi et révélation auditée
+  last4             String
+  currency          String
+  initialValue      Int
+  balance           Int
+  status            GiftCardStatus        @default(ACTIVE)
+  source            GiftCardSource
+  expiresAt         DateTime?
+  customerId        String?
+  sourceOrderId     String?
+  sourceOrderItemId String?
+  sequence          Int                   @default(0)
+  recipientName     String?
+  recipientPhone    String?
+  recipientEmail    String?
+  message           String?
+  sendAt            DateTime?
+  deliveredAt       DateTime?
+  disabledReason    String?
+  createdById       String?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  store             Store                 @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer          Customer?             @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  transactions      GiftCardTransaction[]
+
+  // Idempotence de l'émission : une carte par unité achetée
+  @@unique([sourceOrderItemId, sequence])
+  @@index([storeId, status])
+  @@index([storeId, last4])
+  @@index([customerId])
+  @@index([status, expiresAt])
+}
+
+model GiftCardTransaction {
+  id           String         @id @default(cuid())
+  storeId      String
+  giftCardId   String
+  kind         GiftCardTxKind
+  amount       Int // signé : + crédit, − débit
+  balanceAfter Int
+  orderId      String?
+  returnId     String?
+  actorId      String?
+  note         String?
+  createdAt    DateTime       @default(now())
+  store        Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  giftCard     GiftCard       @relation(fields: [giftCardId], references: [id], onDelete: Cascade)
+  order        Order?         @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([giftCardId, createdAt])
+  @@index([storeId, orderId])
+}
+
+// Journal de l'avoir ; le solde vit dans Customer.storeCreditBalance
+model StoreCreditTransaction {
+  id           String            @id @default(cuid())
+  storeId      String
+  customerId   String
+  kind         StoreCreditTxKind
+  amount       Int // signé
+  balanceAfter Int
+  orderId      String?
+  returnId     String?
+  actorId      String?
+  note         String?
+  createdAt    DateTime          @default(now())
+  store        Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer     Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, customerId, createdAt])
+  @@index([orderId])
+}
+
+// Retour / échange ; transitions : src/lib/returns/state.ts (canTransitionReturn)
+model ReturnRequest {
+  id                String           @id @default(cuid())
+  storeId           String
+  orderId           String
+  customerId        String?
+  reference         String // RT-XXXXXX, unique par boutique
+  status            ReturnStatus     @default(REQUESTED)
+  resolution        ReturnResolution @default(NONE)
+  requestedBy       String // customer | merchant
+  reason            String
+  customerNote      String?
+  merchantNote      String?
+  rejectionReason   String?
+  photos            Json? // [{ url }] max 3
+  restockingFee     Int              @default(0)
+  refundShipping    Boolean          @default(false)
+  refundAmount      Int              @default(0)
+  storeCreditAmount Int              @default(0)
+  exchangeOrderId   String?          @unique // référence logique vers Order (sans relation Prisma)
+  refundId          String?
+  approvedAt        DateTime?
+  receivedAt        DateTime?
+  resolvedAt        DateTime?
+  cancelledAt       DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  store             Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  order             Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customer          Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items             ReturnItem[]
+  events            ReturnEvent[]
+
+  @@unique([storeId, reference])
+  @@index([storeId, status, createdAt])
+  @@index([orderId])
+}
+
+model ReturnItem {
+  id                String        @id @default(cuid())
+  returnId          String
+  orderItemId       String
+  quantity          Int
+  reason            String?
+  condition         String? // neuf | ouvert | abime
+  restock           Boolean       @default(true)
+  restockedQty      Int           @default(0)
+  exchangeVariantId String?
+  returnRequest     ReturnRequest @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  orderItem         OrderItem     @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@unique([returnId, orderItemId])
+}
+
+// Historique immuable d'un retour
+model ReturnEvent {
+  id            String        @id @default(cuid())
+  returnId      String
+  actorId       String?
+  actorLabel    String
+  fromStatus    ReturnStatus?
+  toStatus      ReturnStatus?
+  message       String?
+  createdAt     DateTime      @default(now())
+  returnRequest ReturnRequest @relation(fields: [returnId], references: [id], onDelete: Cascade)
+
+  @@index([returnId, createdAt])
+}
+
+// ─────────────────────────── Lot 1 bis : catalogue WhatsApp / Meta ───────────────────────────
+
+/// Synchronisation d'un canal de catalogue (lot 4 §16, avancée au lot 1 bis pour le catalogue WhatsApp Business
+/// / Commerce Manager). Une ligne par boutique et par canal. Le jeton Graph vient de l'Integration `whatsapp_cloud`
+/// (jamais stocké ici). Job `social.sync`.
+model SocialCatalogSync {
+  id                  String              @id @default(cuid())
+  storeId             String
+  channel             String // meta | whatsapp | tiktok | google
+  status              String              @default("idle") // idle | syncing | ok | error
+  settings            Json? // { includeOutOfStock, collectionIds?, brand? } (liste blanche validée par l'action)
+  itemCount           Int                 @default(0)
+  lastSyncAt          DateTime?
+  lastError           String?
+  // Lot 1 bis (ajouts au §20) : activation, identifiant du catalogue Meta, suivi des échecs et planification
+  enabled             Boolean             @default(false)
+  externalCatalogId   String? // identifiant du catalogue Commerce Manager
+  lastSuccessAt       DateTime?
+  consecutiveFailures Int                 @default(0)
+  nextSyncAt          DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  store               Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  items               SocialCatalogItem[]
+
+  @@unique([storeId, channel])
+  @@index([enabled, nextSyncAt])
+}
+
+/// État par article envoyé à un catalogue externe : synchronisation incrémentale (empreinte du contenu) et erreurs
+/// par article visibles du commerçant. `productId` / `variantId` sont des références LOGIQUES (sans clé étrangère) :
+/// un produit supprimé garde sa ligne pour que le job puisse le retirer du catalogue distant.
+model SocialCatalogItem {
+  id          String            @id @default(cuid())
+  storeId     String
+  syncId      String
+  productId   String
+  variantId   String?
+  retailerId  String // identifiant envoyé à Meta (variantId ?? productId)
+  contentHash String // sha256 des champs envoyés
+  status      String            @default("pending") // pending | synced | error | deleted
+  externalId  String?
+  lastError   String?
+  syncedAt    DateTime?
+  updatedAt   DateTime          @updatedAt
+  store       Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  sync        SocialCatalogSync @relation(fields: [syncId], references: [id], onDelete: Cascade)
+
+  @@unique([syncId, retailerId])
+  @@index([storeId, status])
+  @@index([syncId, productId])
+}
+
+// ─────────────────────────── Lot 2 : international et contenu ───────────────────────────
+
+enum TranslatableResource {
+  STORE
+  PRODUCT
+  VARIANT
+  OPTION
+  COLLECTION
+  PAGE
+  MENU
+  THEME
+  BLOG_POST
+  BLOG_CATEGORY
+}
+
+enum TranslationSource {
+  MANUAL
+  AI
+  IMPORT
+}
+
+enum RoundingRule {
+  NONE
+  NEAREST_5
+  NEAREST_10
+  NEAREST_25
+  NEAREST_50
+  NEAREST_100
+  UP_TO_99
+  UP_TO_95
+}
+
+enum InvoiceKind {
+  INVOICE
+  CREDIT_NOTE
+}
+
+enum BlogPostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  DEAD
+}
+
+/// Traduction d'un champ texte. `sourceHash` = sha256 du texte source au moment de la traduction (obsolescence).
+model Translation {
+  id           String               @id @default(cuid())
+  storeId      String
+  resourceType TranslatableResource
+  resourceId   String // id, handle de menu, ou "published" pour THEME
+  locale       String
+  field        String // chemin du champ (ex. "description", "templates.home.sections.hero-1.settings.heading")
+  value        String
+  source       TranslationSource    @default(MANUAL)
+  sourceHash   String
+  updatedById  String?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  store        Store                @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, resourceType, resourceId, locale, field])
+  @@index([storeId, locale, resourceType])
+}
+
+model StoreCurrency {
+  id         String       @id @default(cuid())
+  storeId    String
+  currency   String
+  enabled    Boolean      @default(true)
+  rateMode   String       @default("auto") // auto | manual
+  manualRate Decimal?     @db.Decimal(20, 10)
+  markupBps  Int          @default(0) // 0..500
+  rounding   RoundingRule @default(NONE)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  store      Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, currency])
+}
+
+/// Taux plateforme (base vers quote), rafraîchi par le job `fx.refresh` ; modifiable uniquement par l'administration.
+model ExchangeRate {
+  id        String   @id @default(cuid())
+  base      String
+  quote     String
+  rate      Decimal  @db.Decimal(20, 10)
+  source    String // ECB | BCEAO_FIXED | manual
+  fetchedAt DateTime
+
+  @@unique([base, quote])
+}
+
+/// Prix fixé par devise (prioritaire sur la conversion). `itemKey` = variantId ?? productId (unicité sans NULL).
+model ProductPrice {
+  id             String   @id @default(cuid())
+  storeId        String
+  productId      String
+  variantId      String?
+  itemKey        String
+  currency       String
+  price          Int
+  compareAtPrice Int?
+  updatedAt      DateTime @updatedAt
+  store          Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([itemKey, currency])
+  @@index([storeId, productId])
+}
+
+model TaxRate {
+  id                String   @id @default(cuid())
+  storeId           String
+  name              String // "TVA"
+  country           String
+  regionKey         String   @default("*")
+  taxCategory       String   @default("standard")
+  rateBps           Int // 1800 = 18 %
+  appliesToShipping Boolean  @default(true)
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  store             Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, country, regionKey, taxCategory])
+}
+
+/// Facture ou avoir fiscal : numérotation sans trou par boutique, instantané immuable, jamais supprimé.
+model OrderInvoice {
+  id         String      @id @default(cuid())
+  storeId    String
+  orderId    String
+  kind       InvoiceKind
+  number     String // F-AAAA-000001 | A-AAAA-000001
+  amount     Int
+  taxTotal   Int
+  currency   String
+  snapshot   Json
+  refundId   String? // référence logique vers Refund (avoir)
+  issuedAt   DateTime    @default(now())
+  issuedById String?
+  store      Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  order      Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, number])
+  @@index([orderId])
+}
+
+model BlogCategory {
+  id          String     @id @default(cuid())
+  storeId     String
+  slug        String
+  name        String
+  description String?
+  position    Int        @default(0)
+  store       Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  posts       BlogPost[]
+
+  @@unique([storeId, slug])
+}
+
+/// Article de blog. Publication programmée résolue à la lecture (PUBLISHED, ou SCHEDULED avec publishedAt passé).
+model BlogPost {
+  id             String         @id @default(cuid())
+  storeId        String
+  categoryId     String?
+  slug           String
+  title          String
+  excerpt        String?
+  body           String // Markdown limité (isSafeMarkdown)
+  coverImage     Json? // { url, alt }
+  authorName     String?
+  tags           String[]       @default([])
+  status         BlogPostStatus @default(DRAFT)
+  publishedAt    DateTime?
+  seoTitle       String?
+  seoDescription String?
+  readingMinutes Int            @default(1)
+  // Lot 4 : modèle alternatif (ThemeDocument.alternates.article[suffix]) ; null = modèle par défaut
+  templateSuffix String?
+  createdById    String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  store          Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  category       BlogCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@unique([storeId, slug])
+  @@index([storeId, status, publishedAt])
+}
+
+/// Point de webhook sortant (https uniquement). Secret `whsec_` chiffré (encryptSecret), jamais renvoyé.
+model WebhookEndpoint {
+  id                  String            @id @default(cuid())
+  storeId             String
+  url                 String
+  description         String?
+  secretEnc           String
+  secretPrefix        String
+  events              String[]
+  apiVersion          String            @default("2026-10")
+  includePersonalData Boolean           @default(false)
+  active              Boolean           @default(true)
+  consecutiveFailures Int               @default(0)
+  disabledAt          DateTime?
+  disabledReason      String?
+  lastSuccessAt       DateTime?
+  lastFailureAt       DateTime?
+  createdById         String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  store               Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  deliveries          WebhookDelivery[]
+
+  @@index([storeId, active])
+}
+
+model WebhookDelivery {
+  id              String                @id @default(cuid())
+  storeId         String
+  endpointId      String
+  eventId         String
+  event           String
+  payload         Json
+  status          WebhookDeliveryStatus @default(PENDING)
+  attempts        Int                   @default(0)
+  nextAttemptAt   DateTime              @default(now())
+  lastStatusCode  Int?
+  lastError       String?
+  responseSnippet String?
+  durationMs      Int?
+  deliveredAt     DateTime?
+  createdAt       DateTime              @default(now())
+  store           Store                 @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  endpoint        WebhookEndpoint       @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@unique([endpointId, eventId])
+  @@index([status, nextAttemptAt])
+  @@index([storeId, createdAt])
+}
+
+/// Idempotence de l'API REST (`Idempotency-Key` obligatoire sur POST, conservée 24 h, purge `idempotency.purge`).
+model ApiIdempotencyKey {
+  id             String   @id @default(cuid())
+  storeId        String
+  key            String
+  method         String
+  path           String
+  requestHash    String
+  responseStatus Int
+  responseBody   Json
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+  store          Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, key])
+  @@index([expiresAt])
+}
+
+// ─────────────────────────── Lot 4 : personnalisation ───────────────────────────
+
+enum MetafieldOwner {
+  PRODUCT
+  VARIANT
+  COLLECTION
+  CUSTOMER
+  ORDER
+  STORE
+  PAGE
+  BLOG_POST
+}
+
+enum ThemeScheduleStatus {
+  SCHEDULED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum AiJobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum ExperimentStatus {
+  DRAFT
+  RUNNING
+  PAUSED
+  COMPLETED
+}
+
+enum LiveEventStatus {
+  SCHEDULED
+  LIVE
+  ENDED
+  CANCELLED
+}
+
+/// Définition de champ personnalisé (metafield) : `namespace.key`, type dans une liste fermée (src/lib/metafields/types.ts).
+model MetafieldDefinition {
+  id                String           @id @default(cuid())
+  storeId           String
+  ownerType         MetafieldOwner
+  namespace         String // ^[a-z0-9_]{1,32}$
+  key               String // ^[a-z0-9_]{1,64}$
+  name              String
+  description       String?
+  type              String
+  validations       Json? // { min, max, regex, choices }
+  storefrontVisible Boolean          @default(true)
+  pinnedPosition    Int?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  store             Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  values            MetafieldValue[]
+
+  @@unique([storeId, ownerType, namespace, key])
+}
+
+/// Valeur d'un champ personnalisé. `ownerId` = référence logique vérifiée dans la même boutique par l'action.
+model MetafieldValue {
+  id           String              @id @default(cuid())
+  storeId      String
+  definitionId String
+  ownerType    MetafieldOwner
+  ownerId      String
+  value        Json
+  updatedAt    DateTime            @updatedAt
+  store        Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  definition   MetafieldDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+
+  @@unique([definitionId, ownerId])
+  @@index([storeId, ownerType, ownerId])
+}
+
+model SavedSection {
+  id          String   @id @default(cuid())
+  storeId     String
+  name        String
+  sectionType String
+  payload     Json // SectionInstance sans id
+  previewUrl  String?
+  usageCount  Int      @default(0)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, name])
+}
+
+/// Bibliothèque de sections de la plateforme (aucune référence d'identifiant de boutique dans `payload`).
+model SectionLibraryItem {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?
+  category    String
+  sectionType String
+  payload     Json
+  previewUrl  String?
+  premium     Boolean  @default(false)
+  minPlan     PlanId   @default(FREE)
+  tags        String[] @default([])
+  published   Boolean  @default(false)
+  position    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([published, category])
+}
+
+/// Thème programmé : document complet, actif si startsAt ≤ maintenant < endsAt (résolu au rendu, sans cron).
+model ThemeSchedule {
+  id          String              @id @default(cuid())
+  storeId     String
+  name        String
+  occasion    String?
+  document    Json
+  startsAt    DateTime
+  endsAt      DateTime
+  status      ThemeScheduleStatus @default(SCHEDULED)
+  createdById String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  store       Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, startsAt, endsAt])
+}
+
+/// Génération de boutique par l'IA (3 directions) ; purgée après `expiresAt` (job `ai.generation_purge`).
+model ThemeGeneration {
+  id           String      @id @default(cuid())
+  storeId      String
+  status       AiJobStatus @default(PENDING)
+  input        Json
+  candidates   Json?
+  chosenIndex  Int?
+  model        String
+  creditsUsed  Int         @default(0)
+  inputTokens  Int         @default(0)
+  outputTokens Int         @default(0)
+  error        String?
+  createdById  String?
+  createdAt    DateTime    @default(now())
+  expiresAt    DateTime
+  store        Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, createdAt])
+  @@index([expiresAt])
+}
+
+model Experiment {
+  id          String           @id @default(cuid())
+  storeId     String
+  name        String
+  template    String // TemplateId ou "product:luxe"
+  sectionId   String
+  goal        String // ADD_TO_CART | CHECKOUT_START | ORDER
+  status      ExperimentStatus @default(DRAFT)
+  variants    Json // [{ key: "A"|"B"|"C", weight, section: SectionInstance | null }]
+  winnerKey   String?
+  startedAt   DateTime?
+  endedAt     DateTime?
+  createdById String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  store       Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  stats       ExperimentStat[]
+
+  @@index([storeId, status])
+}
+
+model ExperimentStat {
+  id           String     @id @default(cuid())
+  experimentId String
+  variantKey   String
+  day          String // AAAA-MM-JJ (fuseau boutique)
+  metric       String // exposure | add_to_cart | checkout_start | order | revenue
+  count        Int        @default(0)
+  experiment   Experiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+
+  @@unique([experimentId, variantKey, day, metric])
+}
+
+/// Abonnement Web Push (clés fournies par le navigateur, non secrètes) ; révoqué sur 404 / 410.
+model PushSubscription {
+  id            String    @id @default(cuid())
+  storeId       String
+  customerId    String?
+  endpoint      String    @unique
+  p256dh        String
+  auth          String
+  topics        String[]  @default([])
+  locale        String?
+  userAgent     String?
+  failures      Int       @default(0)
+  lastSuccessAt DateTime?
+  revokedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  store         Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, revokedAt])
+}
+
+model LiveEvent {
+  id          String          @id @default(cuid())
+  storeId     String
+  title       String
+  startsAt    DateTime
+  endsAt      DateTime?
+  streamUrl   String
+  productIds  String[]        @default([])
+  pinnedId    String?
+  status      LiveEventStatus @default(SCHEDULED)
+  createdById String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  store       Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId, startsAt])
+}
+
+// ─────────────────────────── Lot 3 : opérations ───────────────────────────
+
+/// Dépôt, magasin ou point de retrait d'une boutique. Chaque boutique a un dépôt par défaut
+/// (`isDefault`), créé par `scripts/migrate-locations.ts` puis à la création de la boutique.
+enum LocationType {
+  WAREHOUSE
+  STORE
+  PICKUP_POINT
+}
+
+enum TransferStatus {
+  DRAFT
+  IN_TRANSIT
+  RECEIVED
+  CANCELLED
+}
+
+/// Avancement d'une expédition. Les statuts sont ORDONNÉS (src/lib/shipping/state.ts) : un événement
+/// transporteur tardif ne rétrograde jamais une expédition.
+enum ShipmentStatus {
+  PENDING
+  LABEL_CREATED
+  PICKED_UP
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  FAILED_ATTEMPT
+  RETURNED
+  CANCELLED
+}
+
+enum FulfillmentStatus {
+  UNFULFILLED
+  PARTIAL
+  FULFILLED
+}
+
+enum PosSessionStatus {
+  OPEN
+  CLOSED
+}
+
+model Location {
+  id                   String              @id @default(cuid())
+  storeId              String
+  name                 String
+  type                 LocationType        @default(WAREHOUSE)
+  address              String?
+  city                 String?
+  country              String              @default("BJ")
+  phone                String?
+  latitude             Decimal?            @db.Decimal(9, 6)
+  longitude            Decimal?            @db.Decimal(9, 6)
+  isDefault            Boolean             @default(false)
+  active               Boolean             @default(true)
+  fulfillsOnlineOrders Boolean             @default(true)
+  pickupEnabled        Boolean             @default(false)
+  position             Int                 @default(0)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  store                Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  levels               InventoryLevel[]
+  zones                DeliveryZone[]
+  movements            InventoryMovement[]
+  transfersOut         StockTransfer[]     @relation("TransferFrom")
+  transfersIn          StockTransfer[]     @relation("TransferTo")
+  shipments            Shipment[]
+  posDevices           PosDevice[]
+
+  @@unique([storeId, name])
+  @@index([storeId, active])
+}
+
+/// Stock d'un article dans un dépôt. INVARIANT : Σ `available` (tous dépôts) = `Product.stock` ou
+/// `Variant.stock`. Toute écriture de stock met à jour l'agrégat ET le niveau dans la même transaction
+/// (src/lib/inventory/levels.ts) ; le job quotidien `inventory.reconcile` signale les écarts.
+model InventoryLevel {
+  id         String   @id @default(cuid())
+  storeId    String
+  locationId String
+  productId  String
+  variantId  String?
+  itemKey    String // variantId ?? productId
+  available  Int      @default(0)
+  updatedAt  DateTime @updatedAt
+  store      Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant    Variant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([locationId, itemKey])
+  @@index([storeId, productId])
+}
+
+model StockTransfer {
+  id             String              @id @default(cuid())
+  storeId        String
+  reference      String // TR-XXXXXX
+  fromLocationId String
+  toLocationId   String
+  status         TransferStatus      @default(DRAFT)
+  note           String?
+  createdById    String?
+  shippedAt      DateTime?
+  receivedAt     DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  store          Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  fromLocation   Location            @relation("TransferFrom", fields: [fromLocationId], references: [id], onDelete: Restrict)
+  toLocation     Location            @relation("TransferTo", fields: [toLocationId], references: [id], onDelete: Restrict)
+  items          StockTransferItem[]
+
+  @@unique([storeId, reference])
+  @@index([storeId, status])
+}
+
+model StockTransferItem {
+  id               String        @id @default(cuid())
+  transferId       String
+  productId        String
+  variantId        String?
+  quantity         Int
+  receivedQuantity Int           @default(0)
+  transfer         StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+
+  @@index([transferId])
+}
+
+/// Compte transporteur : `manual` (livreur interne, transporteur sans API) ou adaptateur d'API
+/// (src/lib/carriers/**). Identifiants chiffrés au repos (`encryptSecret`), jamais exposés au client.
+model CarrierAccount {
+  id                   String         @id @default(cuid())
+  storeId              String
+  carrier              String // manual | gozem | yango | dhl | laposte_bj
+  name                 String
+  credentialsEncrypted String?
+  settings             Json?
+  active               Boolean        @default(true)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  store                Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  rates                ShippingRate[]
+  shipments            Shipment[]
+
+  @@index([storeId])
+}
+
+/// Tarif d'expédition d'une zone (poids et sous-total net après remises). Une zone sans tarif garde `DeliveryZone.fee`.
+model ShippingRate {
+  id               String          @id @default(cuid())
+  storeId          String
+  zoneId           String
+  carrierAccountId String?
+  name             String
+  minWeightGrams   Int?
+  maxWeightGrams   Int?
+  minSubtotal      Int?
+  maxSubtotal      Int?
+  price            Int
+  freeAbove        Int?
+  etaLabel         String?
+  active           Boolean         @default(true)
+  position         Int             @default(0)
+  store            Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  zone             DeliveryZone    @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  carrierAccount   CarrierAccount? @relation(fields: [carrierAccountId], references: [id], onDelete: SetNull)
+
+  @@index([storeId, zoneId, active])
+}
+
+model Shipment {
+  id                    String          @id @default(cuid())
+  storeId               String
+  orderId               String
+  locationId            String?
+  carrierAccountId      String?
+  carrier               String
+  service               String?
+  status                ShipmentStatus  @default(PENDING)
+  trackingNumber        String?
+  trackingUrl           String?
+  labelUrl              String?
+  providerRef           String?
+  cost                  Int?
+  weightGrams           Int?
+  courierName           String?
+  courierPhone          String?
+  courierToken          String?         @unique
+  courierTokenExpiresAt DateTime?
+  deliveryCodeHash      String?
+  deliveryAttempts      Int             @default(0)
+  proofPhotoUrl         String?
+  deliveredAt           DateTime?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  store                 Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  order                 Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  location              Location?       @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  carrierAccount        CarrierAccount? @relation(fields: [carrierAccountId], references: [id], onDelete: SetNull)
+  items                 ShipmentItem[]
+  events                ShipmentEvent[]
+
+  @@index([storeId, status])
+  @@index([orderId])
+  @@index([carrier, trackingNumber])
+}
+
+model ShipmentItem {
+  id          String    @id @default(cuid())
+  shipmentId  String
+  orderItemId String
+  quantity    Int
+  shipment    Shipment  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@unique([shipmentId, orderItemId])
+}
+
+model ShipmentEvent {
+  id              String         @id @default(cuid())
+  shipmentId      String
+  status          ShipmentStatus
+  message         String?
+  locationLabel   String?
+  source          String // manual | courier | webhook | poll
+  providerEventId String?
+  occurredAt      DateTime
+  createdAt       DateTime       @default(now())
+  shipment        Shipment       @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@unique([shipmentId, providerEventId])
+  @@index([shipmentId, occurredAt])
+}
+
+/// Appareil de caisse enregistré : le jeton n'existe en clair qu'une fois (affiché à l'enregistrement),
+/// la base n'en garde que l'empreinte. Révocable ; lié à un dépôt (stock décrémenté à ce dépôt).
+model PosDevice {
+  id          String       @id @default(cuid())
+  storeId     String
+  locationId  String
+  name        String
+  tokenHash   String       @unique
+  tokenPrefix String
+  lastSeenAt  DateTime?
+  lastSyncAt  DateTime?
+  revokedAt   DateTime?
+  createdById String?
+  createdAt   DateTime     @default(now())
+  store       Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  location    Location     @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  sessions    PosSession[]
+
+  @@index([storeId, revokedAt])
+}
+
+model PosSession {
+  id           String            @id @default(cuid())
+  storeId      String
+  deviceId     String
+  locationId   String
+  status       PosSessionStatus  @default(OPEN)
+  openedById   String
+  closedById   String?
+  openingFloat Int               @default(0)
+  countedCash  Int?
+  expectedCash Int?
+  discrepancy  Int?
+  report       Json? // rapport Z (immuable une fois la session fermée)
+  openedAt     DateTime          @default(now())
+  closedAt     DateTime?
+  store        Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  device       PosDevice         @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  cashMoves    PosCashMovement[]
+
+  @@index([storeId, status])
+  @@index([deviceId, openedAt])
+}
+
+model PosCashMovement {
+  id        String     @id @default(cuid())
+  sessionId String
+  kind      String // in | out
+  amount    Int
+  reason    String
+  actorId   String?
+  createdAt DateTime   @default(now())
+  session   PosSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}

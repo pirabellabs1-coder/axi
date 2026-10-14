@@ -1,0 +1,22 @@
+# Secrets : ne jamais empaqueter les .env dans le déploiement.
+# Les variables doivent être définies dans Vercel › Settings › Environment Variables.
+.env
+.env.*
+!.env.example
+
+# Base locale (pnpm db:local) et médias du pilote de stockage local
+.local/
+/uploads
+
+# Artefacts de build et de tests
+.next/
+out/
+build/
+coverage/
+e2e-report/
+test-results/
+*.tsbuildinfo
+
+# Divers
+.DS_Store
+tmp-*.mjs

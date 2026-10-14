@@ -1,0 +1,11 @@
+ignoredBuiltDependencies:
+  - sharp
+  - unrs-resolver
+onlyBuiltDependencies:
+  - prisma
+  - "@prisma/client"
+  - "@prisma/engines"
+  - embedded-postgres
+  - "@embedded-postgres/windows-x64"
+  - "@node-rs/argon2"
+  - esbuild

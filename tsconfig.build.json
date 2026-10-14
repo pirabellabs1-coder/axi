@@ -1,0 +1,5 @@
+{
+  "//": "tsconfig minimal utilisé UNIQUEMENT par `next build` (typescript.tsconfigPath). Il hérite des alias/options de tsconfig.json mais ne type-checke presque rien, pour éviter l'OOM du worker TypeScript de Next sur un petit serveur. Le vrai type-check reste `pnpm typecheck` (tsconfig.json complet), exécuté avant livraison.",
+  "extends": "./tsconfig.json",
+  "include": ["next-env.d.ts", ".next/types/**/*.ts"]
+}
