@@ -32,6 +32,16 @@ const PIXEL_CONNECT = "https://www.google-analytics.com https://*.google-analyti
  */
 const TURNSTILE_ORIGIN =
   process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() || process.env.TURNSTILE_SITE_KEY?.trim() || process.env.TURNSTILE_SECRET_KEY?.trim() ? " https://challenges.cloudflare.com" : "";
+/**
+ * Mode partenaire WhatsApp (Embedded Signup, src/lib/whatsapp/embedded-signup.ts) : le SDK JS Meta (déjà autorisé
+ * dans script-src via connect.facebook.net) injecte une iframe cachée sur facebook.com. On n'élargit frame-src QUE
+ * si l'App ID et la config Embedded Signup sont définis au build ; sinon la politique reste inchangée.
+ * Rebâtir après avoir défini NEXT_PUBLIC_META_APP_ID / NEXT_PUBLIC_META_ESIGNUP_CONFIG_ID.
+ */
+const META_ESIGNUP_ORIGIN =
+  process.env.NEXT_PUBLIC_META_APP_ID?.trim() && process.env.NEXT_PUBLIC_META_ESIGNUP_CONFIG_ID?.trim()
+    ? " https://www.facebook.com https://web.facebook.com https://staticxx.facebook.com"
+    : "";
 const cspDirectives = (frameSrc: string) => [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isProd ? "" : " 'unsafe-eval'"} ${PIXEL_SCRIPTS}${TURNSTILE_ORIGIN}`,
@@ -45,7 +55,7 @@ const cspDirectives = (frameSrc: string) => [
   "base-uri 'self'",
   ...(isProd ? ["upgrade-insecure-requests"] : []),
 ].join("; ");
-const csp = cspDirectives(`'self'${TURNSTILE_ORIGIN}`);
+const csp = cspDirectives(`'self'${TURNSTILE_ORIGIN}${META_ESIGNUP_ORIGIN}`);
 /**
  * Applications embarquées de l'App Store (src/app/app/[storeId]/applications/[slug]/ouvrir) : SEULE route où une
  * iframe externe est permise (https ; http://localhost en dev pour la recette). L'URL de l'iframe est fixée par le
