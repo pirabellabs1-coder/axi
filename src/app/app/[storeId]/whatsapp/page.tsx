@@ -16,8 +16,11 @@ import { Progress } from "@/components/ui/progress";
 import { ButtonLink } from "@/components/ui/button";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { PlanGate } from "@/components/app/plan-gate";
+import { partnerModeConfig } from "@/lib/whatsapp/embedded-signup";
+import { GRAPH_VERSION } from "@/lib/social/graph-client";
 import { WhatsappForm } from "./whatsapp-form";
 import { CloudApiForm } from "./cloud-api-form";
+import { EmbeddedSignupButton } from "./embedded-signup";
 import { MessagePreview } from "./message-preview";
 
 export const metadata: Metadata = { title: "WhatsApp" };
@@ -64,8 +67,10 @@ export default async function WhatsappPage({ params }: { params: Promise<{ store
     cartUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/s/${store.slug}/panier/EXEMPLE`,
   });
   const country = getCountry(store.country);
-  const cfg = (integration?.config ?? {}) as { phoneNumberId?: string; wabaId?: string };
+  const cfg = (integration?.config ?? {}) as { phoneNumberId?: string; wabaId?: string; source?: string };
   const status = integration?.status ?? "inactive";
+  const partner = partnerModeConfig();
+  const connectedViaPartner = cfg.source === "embedded_signup";
   const clicks = eventClicks + cartClicks;
   const conversion = clicks > 0 ? Math.round((waOrders / clicks) * 100) : null;
 
@@ -126,24 +131,60 @@ export default async function WhatsappPage({ params }: { params: Promise<{ store
           />
         ) : (
           <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-            <Card>
-              <CardHeader
-                title={
-                  <span className="inline-flex items-center gap-2">
-                    <Cloud className="size-4 text-primary" aria-hidden /> Connexion Meta Cloud API
-                  </span>
-                }
-                description="Nécessite un compte Meta Business et un numéro vérifié. Les notifications partent une fois la connexion validée."
-              />
-              <CardBody>
-                {integration?.lastError && (
-                  <Alert tone="danger" className="mb-4" title="La dernière vérification a échoué">
-                    {integration.lastError}
-                  </Alert>
-                )}
-                <CloudApiForm storeId={store.id} phoneNumberId={cfg.phoneNumberId ?? ""} wabaId={cfg.wabaId ?? ""} hasToken={!!integration?.secretsEncrypted} />
-              </CardBody>
-            </Card>
+            <div className="space-y-6">
+              {partner && (
+                <Card>
+                  <CardHeader
+                    title={
+                      <span className="inline-flex items-center gap-2">
+                        <MessageCircle className="size-4 text-primary" aria-hidden /> Connexion partenaire (recommandé)
+                        {connectedViaPartner && status === "active" && <Badge tone="success" dot>Connecté</Badge>}
+                      </span>
+                    }
+                    description="Connectez votre numéro WhatsApp Business en quelques clics via Meta. Axi configure l'envoi pour vous : aucun identifiant à recopier."
+                  />
+                  <CardBody>
+                    {integration?.lastError && (
+                      <Alert tone="danger" className="mb-4" title="La dernière connexion a échoué">
+                        {integration.lastError}
+                      </Alert>
+                    )}
+                    {connectedViaPartner && status === "active" ? (
+                      <div className="space-y-4">
+                        <Alert tone="success" title="Numéro connecté">
+                          Votre numéro WhatsApp Business est connecté via le mode partenaire. Les messages partent depuis votre numéro.
+                        </Alert>
+                        <EmbeddedSignupButton storeId={store.id} appId={partner.appId} configId={partner.configId} version={GRAPH_VERSION} />
+                      </div>
+                    ) : (
+                      <EmbeddedSignupButton storeId={store.id} appId={partner.appId} configId={partner.configId} version={GRAPH_VERSION} />
+                    )}
+                  </CardBody>
+                </Card>
+              )}
+              <Card>
+                <CardHeader
+                  title={
+                    <span className="inline-flex items-center gap-2">
+                      <Cloud className="size-4 text-primary" aria-hidden /> {partner ? "Connexion manuelle (avancé)" : "Connexion Meta Cloud API"}
+                    </span>
+                  }
+                  description={
+                    partner
+                      ? "Vous gérez déjà votre propre application Meta ? Saisissez vos identifiants Cloud API à la place."
+                      : "Nécessite un compte Meta Business et un numéro vérifié. Les notifications partent une fois la connexion validée."
+                  }
+                />
+                <CardBody>
+                  {!partner && integration?.lastError && (
+                    <Alert tone="danger" className="mb-4" title="La dernière vérification a échoué">
+                      {integration.lastError}
+                    </Alert>
+                  )}
+                  <CloudApiForm storeId={store.id} phoneNumberId={cfg.phoneNumberId ?? ""} wabaId={cfg.wabaId ?? ""} hasToken={!!integration?.secretsEncrypted} />
+                </CardBody>
+              </Card>
+            </div>
 
             <Bezel as="section" coreClassName="p-5">
               <div className="flex items-center justify-between gap-2">
