@@ -11,7 +11,7 @@ import { getCountry } from "@/config/site";
 import { PLANS } from "@/config/plans";
 import { encryptSecret } from "@/lib/crypto";
 import { audit } from "@/lib/audit";
-import { runEmbeddedSignup, partnerModeConfig, EmbeddedSignupError } from "./embedded-signup";
+import { runEmbeddedSignup, requestCoexistenceSyncs, partnerModeConfig, EmbeddedSignupError, type CoexistenceSyncs } from "./embedded-signup";
 import { loadWabaCreds, createTemplate, deleteTemplate, TemplateError } from "./templates";
 
 const waSchema = z.object({
@@ -116,6 +116,8 @@ const esignupSchema = z.object({
   // Facultatif : si la fenêtre Meta ne l'a pas renvoyé, le serveur retrouve le numéro du compte (WABA).
   phoneNumberId: z.union([z.literal(""), z.string().trim().regex(/^\d{5,32}$/, "Identifiant du numéro invalide")]).optional(),
   wabaId: z.string().trim().regex(/^\d{5,32}$/, "Identifiant WABA invalide"),
+  // « coexistence » : le marchand garde l'app WhatsApp Business sur le même numéro (pas de /register, synchros).
+  mode: z.enum(["standard", "coexistence"]).default("standard"),
 });
 
 /**
@@ -123,12 +125,21 @@ const esignupSchema = z.object({
  * fenêtre Meta. Axi (Tech Provider) échange le code, s'abonne à la WABA et enregistre le numéro, puis stocke le
  * jeton chiffré dans la même Integration `whatsapp_cloud` que la saisie manuelle. Le numéro étant vérifié et
  * abonné dans le flux, l'intégration passe directement « active ».
+ * Coexistence : après enregistrement de l'intégration (pour que les webhooks de synchro trouvent la boutique),
+ * demande une fois la synchro des contacts puis de l'historique ; un échec n'annule pas la connexion, il est
+ * tracé dans `config.coexistence` et affiché au marchand.
  */
-export async function finishEmbeddedSignup(input: { storeId: string; code: string; phoneNumberId?: string; wabaId: string }): Promise<ActionResult> {
+export async function finishEmbeddedSignup(input: {
+  storeId: string;
+  code: string;
+  phoneNumberId?: string;
+  wabaId: string;
+  mode?: "standard" | "coexistence";
+}): Promise<ActionResult> {
   return guard(async () => {
     const parsed = esignupSchema.safeParse(input);
     if (!parsed.success) return fail(z.flattenError(parsed.error).formErrors[0] ?? "Données de connexion invalides.");
-    const { storeId, code, phoneNumberId, wabaId } = parsed.data;
+    const { storeId, code, phoneNumberId, wabaId, mode } = parsed.data;
     if (!partnerModeConfig()) return fail("Le mode partenaire WhatsApp n'est pas disponible pour le moment. Utilisez la connexion manuelle.");
 
     const ctx = await requireStore(storeId, "integrations.manage");
@@ -137,14 +148,26 @@ export async function finishEmbeddedSignup(input: { storeId: string; code: strin
     }
 
     // M2 : un numéro Meta n'appartient qu'à une boutique (colonne unique Integration.phoneNumberId).
-    const taken = await db.integration.findUnique({ where: { phoneNumberId }, select: { storeId: true } });
+    const taken = phoneNumberId ? await db.integration.findUnique({ where: { phoneNumberId }, select: { storeId: true } }) : null;
     if (taken && taken.storeId !== ctx.store.id) {
       return fail("Ce numéro WhatsApp est déjà connecté à une autre boutique Axi. Contactez le support si vous en êtes le titulaire.");
     }
 
     let result;
     try {
-      result = await runEmbeddedSignup({ code, phoneNumberId, wabaId });
+      result = await runEmbeddedSignup({
+        code,
+        phoneNumberId,
+        wabaId,
+        mode,
+        // Numéro EFFECTIF (après résolution côté Meta), contrôlé avant abonnement / enregistrement.
+        assertPhoneAvailable: async (effective) => {
+          const owner = await db.integration.findUnique({ where: { phoneNumberId: effective }, select: { storeId: true } });
+          if (owner && owner.storeId !== ctx.store.id) {
+            throw new EmbeddedSignupError("Ce numéro WhatsApp est déjà connecté à une autre boutique Axi. Contactez le support si vous en êtes le titulaire.");
+          }
+        },
+      });
     } catch (e) {
       if (e instanceof EmbeddedSignupError) {
         // Trace l'échec sur l'intégration (si elle existe) pour affichage ; ne crée rien si elle n'existe pas.
@@ -154,16 +177,25 @@ export async function finishEmbeddedSignup(input: { storeId: string; code: strin
       throw e;
     }
 
-    const config: Prisma.InputJsonValue = {
+    // Reconnexion du même numéro en coexistence : les synchros déjà demandées ne sont pas redemandées (une seule fois).
+    const previous = await db.integration.findUnique({ where: { storeId_kind: { storeId: ctx.store.id, kind: "whatsapp_cloud" } }, select: { phoneNumberId: true, config: true } });
+    const previousSyncs =
+      previous?.phoneNumberId === result.phoneNumberId ? ((previous.config as { coexistence?: Partial<CoexistenceSyncs> } | null)?.coexistence ?? null) : null;
+
+    const baseConfig = {
       phoneNumberId: result.phoneNumberId,
       wabaId: result.wabaId,
       source: "embedded_signup",
+      mode: result.mode,
       ...(result.verifiedName ? { verifiedName: result.verifiedName } : {}),
       ...(result.displayPhoneNumber ? { displayPhoneNumber: result.displayPhoneNumber } : {}),
+      ...(result.bizApp ? { bizApp: result.bizApp } : {}),
       connectedAt: new Date().toISOString(),
     };
-    // Le jeton n'expire pas (utilisateur système business) ; le PIN sert à une éventuelle réinscription du numéro.
-    const secrets = encryptSecret(JSON.stringify({ token: result.token, pin: result.pin }));
+    const config: Prisma.InputJsonValue = baseConfig;
+    // Le jeton n'expire pas (utilisateur système business) ; le PIN sert à une éventuelle réinscription du numéro
+    // (absent en coexistence : le numéro reste enregistré dans l'app WhatsApp Business).
+    const secrets = encryptSecret(JSON.stringify(result.pin ? { token: result.token, pin: result.pin } : { token: result.token }));
     try {
       await db.integration.upsert({
         where: { storeId_kind: { storeId: ctx.store.id, kind: "whatsapp_cloud" } },
@@ -177,6 +209,15 @@ export async function finishEmbeddedSignup(input: { storeId: string; code: strin
       throw e;
     }
 
+    let syncs: CoexistenceSyncs | null = null;
+    if (result.mode === "coexistence") {
+      syncs = await requestCoexistenceSyncs(result.phoneNumberId, result.token, previousSyncs);
+      await db.integration.update({
+        where: { storeId_kind: { storeId: ctx.store.id, kind: "whatsapp_cloud" } },
+        data: { config: { ...baseConfig, coexistence: syncs } },
+      });
+    }
+
     // Renseigne le numéro wa.me s'il est absent avec CE numéro (format international, quel que soit le pays) :
     // les clients qui cliquent « Commander sur WhatsApp » écrivent ainsi au numéro relié à l'API.
     const apiNumber = apiNumberDigits(result.displayPhoneNumber);
@@ -184,9 +225,18 @@ export async function finishEmbeddedSignup(input: { storeId: string; code: strin
       await db.store.update({ where: { id: ctx.store.id }, data: { whatsappNumber: apiNumber } });
     }
 
-    await audit({ storeId: ctx.store.id, actorId: ctx.user.id, action: "integration.whatsapp_cloud.connected", metadata: { phoneNumberId: result.phoneNumberId, source: "embedded_signup" } });
+    await audit({ storeId: ctx.store.id, actorId: ctx.user.id, action: "integration.whatsapp_cloud.connected", metadata: { phoneNumberId: result.phoneNumberId, source: "embedded_signup", mode: result.mode, ...(syncs ? { contactsSync: syncs.contactsSync.slice(0, 80), historySync: syncs.historySync.slice(0, 80) } : {}) } });
     revalidatePath(`/app/${ctx.store.id}/whatsapp`);
     revalidatePath(`/s/${ctx.store.slug}`, "layout");
+    if (syncs) {
+      const failed = syncs.contactsSync !== "requested" || syncs.historySync !== "requested";
+      return success(
+        undefined,
+        failed
+          ? "WhatsApp connecté en coexistence. Une synchronisation (contacts ou historique) n'a pas pu être lancée : détail sur la page WhatsApp."
+          : "WhatsApp connecté en coexistence. Vos contacts et votre historique sont en cours d'import ; les messages envoyés depuis votre téléphone apparaîtront aussi dans Axi.",
+      );
+    }
     return success(undefined, "WhatsApp connecté. Vous pouvez envoyer des messages depuis votre numéro.");
   });
 }

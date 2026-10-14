@@ -39,6 +39,44 @@ function thirtyDaysAgo() {
   return new Date(Date.now() - 30 * 86400_000);
 }
 
+/** Libellé d'une synchronisation coexistence (« requested » ou « failed:<raison> »). */
+function syncLabel(state: string | undefined): { tone: BadgeTone; label: string; detail: string | null } {
+  if (state === "requested") return { tone: "success", label: "Demandée", detail: null };
+  if (state?.startsWith("failed:")) return { tone: "danger", label: "Échec", detail: state.slice("failed:".length) };
+  return { tone: "neutral", label: "Non demandée", detail: null };
+}
+
+function CoexistenceStatus({ syncs }: { syncs?: { contactsSync?: string; historySync?: string; at?: string } }) {
+  const rows = [
+    { name: "Contacts", ...syncLabel(syncs?.contactsSync) },
+    { name: "Historique des conversations", ...syncLabel(syncs?.historySync) },
+  ];
+  return (
+    <div className="space-y-3">
+      <dl className="divide-y divide-line rounded-[var(--radius-md)] ring-1 ring-line">
+        {rows.map((r) => (
+          <div key={r.name} className="px-3.5 py-2.5 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <dt className="text-ink-muted">{r.name}</dt>
+              <dd>
+                <Badge tone={r.tone} dot>{r.label}</Badge>
+              </dd>
+            </div>
+            {r.detail && <p className="mt-1 text-xs text-danger">{r.detail}</p>}
+          </div>
+        ))}
+      </dl>
+      {syncs?.at && <p className="text-xs text-ink-muted">Synchronisation lancée le {formatDateTime(new Date(syncs.at))}. L&apos;import peut prendre quelques heures.</p>}
+      <ul className="list-disc space-y-1 pl-5 text-xs leading-relaxed text-ink-muted">
+        <li>Débit limité à 20 messages par seconde via l&apos;API.</li>
+        <li>Groupes et listes de diffusion ne passent pas par l&apos;API : utilisez-les depuis l&apos;application.</li>
+        <li>Les appareils liés (WhatsApp Web, ordinateur) ont été déconnectés à l&apos;activation : reconnectez-les.</li>
+        <li>Les messages envoyés via Axi (API) sont facturés ; ceux envoyés depuis l&apos;application restent gratuits.</li>
+      </ul>
+    </div>
+  );
+}
+
 export default async function WhatsappPage({ params }: { params: Promise<{ storeId: string }> }) {
   const { storeId } = await params;
   const ctx = await getStoreContext(storeId, "store.settings");
@@ -69,7 +107,13 @@ export default async function WhatsappPage({ params }: { params: Promise<{ store
     cartUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/s/${store.slug}/panier/EXEMPLE`,
   });
   const country = getCountry(store.country);
-  const cfg = (integration?.config ?? {}) as { phoneNumberId?: string; wabaId?: string; source?: string };
+  const cfg = (integration?.config ?? {}) as {
+    phoneNumberId?: string;
+    wabaId?: string;
+    source?: string;
+    mode?: string;
+    coexistence?: { contactsSync?: string; historySync?: string; at?: string };
+  };
   const status = integration?.status ?? "inactive";
   const partner = partnerModeConfig();
   const esSetup = buildEmbeddedSignupSetup({
@@ -79,6 +123,7 @@ export default async function WhatsappPage({ params }: { params: Promise<{ store
     dialCode: getCountry(store.country).dialCode,
   });
   const connectedViaPartner = cfg.source === "embedded_signup";
+  const coexistence = connectedViaPartner && cfg.mode === "coexistence";
   const clicks = eventClicks + cartClicks;
   const conversion = clicks > 0 ? Math.round((waOrders / clicks) * 100) : null;
 
@@ -161,6 +206,7 @@ export default async function WhatsappPage({ params }: { params: Promise<{ store
                       <span className="inline-flex items-center gap-2">
                         <MessageCircle className="size-4 text-primary" aria-hidden /> Connexion partenaire (recommandé)
                         {connectedViaPartner && status === "active" && <Badge tone="success" dot>Connecté</Badge>}
+                        {coexistence && status === "active" && <Badge tone="info">Coexistence</Badge>}
                       </span>
                     }
                     description="Connectez votre numéro WhatsApp Business en quelques clics via Meta. Axi configure l'envoi pour vous : aucun identifiant à recopier."
@@ -174,8 +220,11 @@ export default async function WhatsappPage({ params }: { params: Promise<{ store
                     {connectedViaPartner && status === "active" ? (
                       <div className="space-y-4">
                         <Alert tone="success" title="Numéro connecté">
-                          Votre numéro WhatsApp Business est connecté via le mode partenaire. Les messages partent depuis votre numéro.
+                          {coexistence
+                            ? "Votre numéro est connecté en coexistence : vous gardez l'application WhatsApp Business sur votre téléphone. Les messages envoyés depuis votre téléphone apparaissent aussi dans Axi."
+                            : "Votre numéro WhatsApp Business est connecté via le mode partenaire. Les messages partent depuis votre numéro."}
                         </Alert>
+                        {coexistence && <CoexistenceStatus syncs={cfg.coexistence} />}
                         <EmbeddedSignupButton storeId={store.id} appId={partner.appId} configId={partner.configId} version={GRAPH_VERSION} setup={esSetup} connected />
                       </div>
                     ) : (

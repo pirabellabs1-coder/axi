@@ -110,3 +110,40 @@ export function buildEmbeddedSignupSetup(input: { store: PrefillStore; email?: s
   if (phone) out.phone = phone;
   return out;
 }
+
+/** « coexistence » : le marchand garde l'app WhatsApp Business sur le même numéro (featureType Meta dédié). */
+export type SignupMode = "standard" | "coexistence";
+
+/** Options `extras` de FB.login. Le pré-remplissage `setup` est envoyé dans les deux modes. */
+export function buildLoginExtras(setup: EmbeddedSignupSetup, mode: SignupMode) {
+  return {
+    setup,
+    featureType: mode === "coexistence" ? "whatsapp_business_app_onboarding" : "",
+    sessionInfoVersion: "3",
+    // v4 : doit correspondre à la configuration Embedded Signup créée chez Meta (« ES Config », v4).
+    version: "v4",
+  };
+}
+
+export type EsignupSession = { phoneNumberId?: string; wabaId?: string; error?: string; step?: string };
+
+/**
+ * Analyse un message postMessage de la fenêtre Meta (`type: "WA_EMBEDDED_SIGNUP"`). Renvoie null s'il ne
+ * concerne pas l'Embedded Signup. FINISH, FINISH_ONLY_WABA, FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING (ce dernier
+ * ne renvoie que `waba_id` : le serveur retrouve le numéro).
+ */
+export function parseEsignupMessage(raw: unknown): EsignupSession | null {
+  let payload: { type?: string; event?: string; data?: { phone_number_id?: string; waba_id?: string; error_message?: string; current_step?: string } } | null;
+  try {
+    payload = typeof raw === "string" ? JSON.parse(raw) : (raw as typeof payload);
+  } catch {
+    return null;
+  }
+  if (!payload || typeof payload !== "object" || payload.type !== "WA_EMBEDDED_SIGNUP") return null;
+  const ev = typeof payload.event === "string" ? payload.event : "";
+  const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
+  if (ev.startsWith("FINISH") && payload.data) return { phoneNumberId: str(payload.data.phone_number_id), wabaId: str(payload.data.waba_id) };
+  if (ev === "CANCEL") return { step: str(payload.data?.current_step) ?? "inconnue" };
+  if (ev === "ERROR") return { error: str(payload.data?.error_message) ?? "erreur inconnue" };
+  return null;
+}

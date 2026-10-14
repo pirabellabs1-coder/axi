@@ -11,7 +11,8 @@ import { GRAPH_VERSION } from "@/lib/social/graph-client";
  *   1. échange `code` → jeton d'accès (utilisateur système d'intégration business, non expirant) ;
  *   2. lecture du numéro (valide que le jeton y donne accès, récupère le numéro affiché / nom vérifié) ;
  *   3. abonnement de la WABA à l'app Axi (le webhook partagé reçoit alors les événements de ce numéro) ;
- *   4. enregistrement du numéro sur la Cloud API avec un PIN (vérification en deux étapes).
+ *   4. enregistrement du numéro sur la Cloud API avec un PIN (vérification en deux étapes) — sauf en COEXISTENCE
+ *      (numéro conservé dans l'app WhatsApp Business : déjà enregistré, puis synchros contacts/historique).
  * Le jeton obtenu est ensuite chiffré au repos dans l'Integration `whatsapp_cloud`, EXACTEMENT comme la saisie
  * manuelle : `send.ts` et le webhook (routage par `phoneNumberId`) fonctionnent sans changement.
  *
@@ -101,17 +102,26 @@ async function fetchPhoneNumber(phoneNumberId: string, token: string, fetchImpl:
   return { displayPhoneNumber: data.display_phone_number ?? null, verifiedName: data.verified_name ?? null };
 }
 
-/**
- * Si Meta n'a renvoyé que le compte (WABA) sans le numéro, retrouve le numéro de ce compte. Exige qu'il y en ait
- * exactement un (sinon on ne peut pas deviner lequel connecter).
- */
-async function resolvePhoneNumberId(wabaId: string, token: string, fetchImpl: typeof fetch): Promise<string> {
+/** Numéros rattachés à la WABA (le jeton doit y donner accès). */
+async function listPhoneNumberIds(wabaId: string, token: string, fetchImpl: typeof fetch): Promise<string[]> {
   const data = await graph<{ data?: { id?: string }[] }>(
     fetchImpl,
     `https://graph.facebook.com/${GRAPH_VERSION}/${wabaId}/phone_numbers?fields=id`,
     { method: "GET", headers: { Authorization: `Bearer ${token}` } },
   );
-  const ids = (data.data ?? []).map((p) => p.id).filter((id): id is string => typeof id === "string" && /^\d{5,32}$/.test(id));
+  return (Array.isArray(data.data) ? data.data : []).map((p) => p?.id).filter((id): id is string => typeof id === "string" && /^\d{5,32}$/.test(id));
+}
+
+/**
+ * Numéro effectif : celui fourni par la fenêtre Meta s'il appartient bien à la WABA (sinon erreur : un client
+ * ne doit pas pouvoir rattacher un numéro étranger), ou, à défaut, l'unique numéro de la WABA.
+ */
+async function resolvePhoneNumberId(wabaId: string, token: string, given: string | null, fetchImpl: typeof fetch): Promise<string> {
+  const ids = await listPhoneNumberIds(wabaId, token, fetchImpl);
+  if (given) {
+    if (!ids.includes(given)) throw new EmbeddedSignupError("Le numéro renvoyé n'appartient pas à ce compte WhatsApp Business. Relancez la connexion.");
+    return given;
+  }
   if (ids.length === 0) throw new EmbeddedSignupError("Aucun numéro n'est rattaché à ce compte WhatsApp Business : ajoutez et vérifiez un numéro dans la fenêtre Meta, puis réessayez.");
   if (ids.length > 1) throw new EmbeddedSignupError("Ce compte WhatsApp Business contient plusieurs numéros : relancez la connexion et sélectionnez le numéro à connecter.");
   return ids[0];
@@ -140,24 +150,44 @@ async function registerPhoneNumber(phoneNumberId: string, token: string, pin: st
   }
 }
 
+/** Mode de connexion : nouveau numéro (Cloud API seule) ou coexistence (app WhatsApp Business + Cloud API). */
+export type EmbeddedSignupMode = "standard" | "coexistence";
+
 export type EmbeddedSignupResult = {
   token: string;
-  pin: string;
+  /** PIN de vérification en deux étapes ; null en coexistence (numéro déjà enregistré dans l'app, pas de /register). */
+  pin: string | null;
   phoneNumberId: string;
   wabaId: string;
   displayPhoneNumber: string | null;
   verifiedName: string | null;
+  mode: EmbeddedSignupMode;
+  /** Coexistence : état côté Meta (`is_on_biz_app`, `platform_type`), lu au mieux (null si indisponible). */
+  bizApp: { isOnBizApp: boolean | null; platformType: string | null } | null;
 };
 
 /**
  * Déroule le flux complet et renvoie de quoi enregistrer l'intégration (jeton + PIN chiffrés par l'appelant).
  * `fetchImpl` est injectable pour les tests. Lève EmbeddedSignupError (affichable) à la moindre étape ratée.
+ *
+ * Coexistence (`mode: "coexistence"`, featureType `whatsapp_business_app_onboarding`) : le numéro reste dans
+ * l'application WhatsApp Business du marchand et y est déjà enregistré : on n'appelle PAS `/register` (pas de PIN).
+ * Les synchronisations contacts / historique sont demandées APRÈS l'enregistrement de l'intégration
+ * (`requestCoexistenceSyncs`), pour que leurs webhooks trouvent la boutique.
  */
 export async function runEmbeddedSignup(
-  input: { code: string; phoneNumberId?: string | null; wabaId: string },
+  input: {
+    code: string;
+    phoneNumberId?: string | null;
+    wabaId: string;
+    mode?: EmbeddedSignupMode;
+    /** Contrôle sur le numéro EFFECTIF (ex. déjà pris par une autre boutique), avant abonnement / `/register`. Lève pour refuser. */
+    assertPhoneAvailable?: (phoneNumberId: string) => Promise<void>;
+  },
   fetchImpl: typeof fetch = fetch,
 ): Promise<EmbeddedSignupResult> {
   if (!partnerModeConfig()) throw new EmbeddedSignupError("Mode partenaire non configuré.");
+  const mode: EmbeddedSignupMode = input.mode === "coexistence" ? "coexistence" : "standard";
   const code = input.code.trim();
   const { wabaId } = input;
   const givenPhone = input.phoneNumberId?.trim() || null;
@@ -166,11 +196,71 @@ export async function runEmbeddedSignup(
   if (!/^\d{5,32}$/.test(wabaId)) throw new EmbeddedSignupError("Identifiant WABA invalide.");
 
   const token = await exchangeCodeForToken(code, fetchImpl);
-  const phoneNumberId = givenPhone ?? (await resolvePhoneNumberId(wabaId, token, fetchImpl));
+  const phoneNumberId = await resolvePhoneNumberId(wabaId, token, givenPhone, fetchImpl);
+  if (input.assertPhoneAvailable) await input.assertPhoneAvailable(phoneNumberId);
   const phone = await fetchPhoneNumber(phoneNumberId, token, fetchImpl);
   await subscribeAppToWaba(wabaId, token, fetchImpl);
-  const pin = numericCode(6);
-  await registerPhoneNumber(phoneNumberId, token, pin, fetchImpl);
 
-  return { token, pin, phoneNumberId, wabaId, displayPhoneNumber: phone.displayPhoneNumber, verifiedName: phone.verifiedName };
+  let pin: string | null = null;
+  let bizApp: EmbeddedSignupResult["bizApp"] = null;
+  if (mode === "standard") {
+    pin = numericCode(6);
+    await registerPhoneNumber(phoneNumberId, token, pin, fetchImpl);
+  } else {
+    bizApp = await fetchBizAppState(phoneNumberId, token, fetchImpl);
+  }
+
+  return { token, pin, phoneNumberId, wabaId, displayPhoneNumber: phone.displayPhoneNumber, verifiedName: phone.verifiedName, mode, bizApp };
+}
+
+/** Coexistence : lit `is_on_biz_app` / `platform_type`. Informatif : une erreur ici ne bloque jamais la connexion. */
+async function fetchBizAppState(phoneNumberId: string, token: string, fetchImpl: typeof fetch): Promise<EmbeddedSignupResult["bizApp"]> {
+  try {
+    const data = await graph<{ is_on_biz_app?: boolean; platform_type?: string }>(
+      fetchImpl,
+      `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}?fields=is_on_biz_app,platform_type`,
+      { method: "GET", headers: { Authorization: `Bearer ${token}` } },
+    );
+    return {
+      isOnBizApp: typeof data.is_on_biz_app === "boolean" ? data.is_on_biz_app : null,
+      platformType: typeof data.platform_type === "string" ? data.platform_type.slice(0, 40) : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** État d'une synchronisation coexistence, stocké dans `Integration.config.coexistence`. */
+export type SyncState = "requested" | `failed:${string}`;
+export type CoexistenceSyncs = { contactsSync: SyncState; historySync: SyncState; at: string };
+
+/** Une demande de synchronisation `smb_app_data` (à n'appeler qu'une fois par type, dans les 24 h de l'onboarding). */
+async function requestSmbSync(phoneNumberId: string, token: string, syncType: "smb_app_state_sync" | "history", fetchImpl: typeof fetch): Promise<SyncState> {
+  try {
+    await graph(fetchImpl, `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/smb_app_data`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ messaging_product: "whatsapp", sync_type: syncType }),
+    });
+    return "requested";
+  } catch (e) {
+    const msg = e instanceof EmbeddedSignupError ? e.message : "erreur inconnue";
+    return `failed:${msg.slice(0, 200)}`;
+  }
+}
+
+/**
+ * Coexistence : demande la synchronisation des contacts PUIS de l'historique (ordre imposé par Meta).
+ * Ne lève jamais : un échec est renvoyé dans l'état (connexion conservée, échec affiché au marchand).
+ * `previous` : synchros déjà demandées avec succès pour ce numéro (reconnexion) → non redemandées.
+ */
+export async function requestCoexistenceSyncs(
+  phoneNumberId: string,
+  token: string,
+  previous: Partial<CoexistenceSyncs> | null = null,
+  fetchImpl: typeof fetch = fetch,
+): Promise<CoexistenceSyncs> {
+  const contactsSync = previous?.contactsSync === "requested" ? "requested" : await requestSmbSync(phoneNumberId, token, "smb_app_state_sync", fetchImpl);
+  const historySync = previous?.historySync === "requested" ? "requested" : await requestSmbSync(phoneNumberId, token, "history", fetchImpl);
+  return { contactsSync, historySync, at: new Date().toISOString() };
 }

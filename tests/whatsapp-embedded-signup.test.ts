@@ -20,11 +20,14 @@ function mockFetch(handlers: Handler[]): typeof fetch {
   }) as unknown as typeof fetch;
 }
 
+const LIST = (ids: string[] = [PHONE]): Handler => ({ match: (u) => u.includes(`/${WABA}/phone_numbers`), body: { data: ids.map((id) => ({ id })) } });
+
 const okHandlers = (): Handler[] => [
   { match: (u) => u.includes("/oauth/access_token"), body: { access_token: "EAAtest-token", token_type: "bearer" } },
   { match: (u) => u.includes(`/${PHONE}?fields=`), body: { display_phone_number: "+229 01 67 00 00 00", verified_name: "Maison Kairos" } },
   { match: (u) => u.includes(`/${WABA}/subscribed_apps`), body: { success: true } },
   { match: (u) => u.includes(`/${PHONE}/register`), body: { success: true } },
+  LIST(),
 ];
 
 beforeEach(() => {
@@ -68,8 +71,8 @@ describe("runEmbeddedSignup", () => {
     expect(res.wabaId).toBe(WABA);
     expect(res.displayPhoneNumber).toBe("+229 01 67 00 00 00");
     expect(res.verifiedName).toBe("Maison Kairos");
-    // 4 appels Graph : échange, lecture numéro, abonnement, enregistrement.
-    expect((fetchImpl as unknown as ReturnType<typeof vi.fn>)).toHaveBeenCalledTimes(4);
+    // 5 appels Graph : échange, liste des numéros de la WABA, lecture numéro, abonnement, enregistrement.
+    expect((fetchImpl as unknown as ReturnType<typeof vi.fn>)).toHaveBeenCalledTimes(5);
   });
 
   it("transmet le jeton business en Bearer sur les appels authentifiés", async () => {
@@ -108,6 +111,7 @@ describe("runEmbeddedSignup", () => {
   it("échoue si l'abonnement de la WABA échoue", async () => {
     const fetchImpl = mockFetch([
       { match: (u) => u.includes("/oauth/access_token"), body: { access_token: "t" } },
+      LIST(),
       { match: (u) => u.includes(`/${PHONE}?fields=`), body: { display_phone_number: "x" } },
       { match: (u) => u.includes(`/${WABA}/subscribed_apps`), status: 403, body: { error: { message: "Application does not have permission" } } },
     ]);
@@ -152,5 +156,27 @@ describe("runEmbeddedSignup — numéro non renvoyé par la fenêtre Meta", () =
 
   it("échoue clairement si le compte a plusieurs numéros", async () => {
     await expect(runEmbeddedSignup({ code: "c", phoneNumberId: null, wabaId: WABA }, mockFetch([listHandler([PHONE, "555666777"]), ...okHandlers()]))).rejects.toThrow(/plusieurs numéros/);
+  });
+});
+
+describe("runEmbeddedSignup — contrôles du numéro (audit F1/F2)", () => {
+  it("refuse un phone_number_id qui n'appartient pas à la WABA, avant toute action", async () => {
+    const fetchImpl = mockFetch([LIST(["555666777"]), ...okHandlers()]);
+    await expect(runEmbeddedSignup({ code: "c", phoneNumberId: PHONE, wabaId: WABA }, fetchImpl)).rejects.toThrow(/n'appartient pas/);
+    const urls = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls.map((c) => String(c[0]));
+    expect(urls.some((u) => u.includes("subscribed_apps") || u.includes("/register"))).toBe(false);
+  });
+
+  it("contrôle le numéro EFFECTIF (résolu) avant abonnement et /register", async () => {
+    const seen: string[] = [];
+    const fetchImpl = mockFetch(okHandlers());
+    const assertPhoneAvailable = vi.fn(async (id: string) => {
+      seen.push(id);
+      throw new EmbeddedSignupError("déjà connecté à une autre boutique");
+    });
+    await expect(runEmbeddedSignup({ code: "c", phoneNumberId: "", wabaId: WABA, assertPhoneAvailable }, fetchImpl)).rejects.toThrow(/autre boutique/);
+    expect(seen).toEqual([PHONE]);
+    const urls = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls.map((c) => String(c[0]));
+    expect(urls.some((u) => u.includes("subscribed_apps") || u.includes("/register"))).toBe(false);
   });
 });

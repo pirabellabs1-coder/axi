@@ -3,18 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
-import { MessageCircle } from "lucide-react";
+import { MessageCircle, Smartphone } from "lucide-react";
 import { finishEmbeddedSignup } from "@/lib/whatsapp/actions";
-import type { EmbeddedSignupSetup } from "@/lib/whatsapp/embedded-signup-prefill";
+import { buildLoginExtras, parseEsignupMessage, type EmbeddedSignupSetup, type SignupMode } from "@/lib/whatsapp/embedded-signup-prefill";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/misc";
-
-/** Données renvoyées par la fenêtre Meta via postMessage à la fin du flux Embedded Signup. */
-type EsignupMessage = {
-  type?: string;
-  event?: string;
-  data?: { phone_number_id?: string; waba_id?: string; error_message?: string; current_step?: string };
-};
 
 declare global {
   interface Window {
@@ -45,7 +38,8 @@ function waitForSession(ref: { current: { phoneNumberId?: string; wabaId?: strin
 type Status = { kind: "idle" } | { kind: "working" } | { kind: "error"; message: string } | { kind: "done"; message: string };
 
 /**
- * Bouton « Connecter avec WhatsApp » (mode partenaire). Charge le SDK JS Meta, lance l'Embedded Signup, récupère
+ * Boutons de connexion (mode partenaire) : « J'utilise déjà WhatsApp Business » (coexistence) ou « Connecter un
+ * nouveau numéro » (flux standard). Charge le SDK JS Meta, lance l'Embedded Signup, récupère
  * le `code` (callback FB.login) ainsi que `phone_number_id` / `waba_id` (message de la fenêtre), puis appelle
  * l'action serveur qui finalise la connexion. Aucun identifiant à copier-coller côté marchand.
  */
@@ -63,9 +57,10 @@ export function EmbeddedSignupButton({
   version: string;
   /** Pré-remplissage de la fenêtre Meta (infos de la boutique). */
   setup?: EmbeddedSignupSetup;
-  /** Un numéro est déjà connecté : le bouton sert à changer de numéro. */
+  /** Un numéro est déjà connecté : les boutons servent à changer de numéro. */
   connected?: boolean;
 }) {
+  const [mode, setMode] = useState<SignupMode | null>(null);
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [status, setStatus] = useState<Status>({ kind: "idle" });
@@ -89,22 +84,8 @@ export function EmbeddedSignupButton({
         return;
       }
       if (host !== "facebook.com" && !host.endsWith(".facebook.com")) return;
-      let payload: EsignupMessage | null = null;
-      try {
-        payload = typeof event.data === "string" ? (JSON.parse(event.data) as EsignupMessage) : (event.data as EsignupMessage);
-      } catch {
-        return;
-      }
-      if (payload?.type !== "WA_EMBEDDED_SIGNUP") return;
-      const ev = payload.event ?? "";
-      // FINISH, FINISH_ONLY_WABA, FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING… (sessionInfoVersion 3)
-      if (ev.startsWith("FINISH") && payload.data) {
-        sessionRef.current = { phoneNumberId: payload.data.phone_number_id, wabaId: payload.data.waba_id };
-      } else if (ev === "CANCEL") {
-        sessionRef.current = { step: payload.data?.current_step };
-      } else if (ev === "ERROR") {
-        sessionRef.current = { error: payload.data?.error_message };
-      }
+      const session = parseEsignupMessage(event.data);
+      if (session) sessionRef.current = session;
     }
     window.addEventListener("message", onMessage);
     // Si le script a chargé avant le montage (navigation cliente), initialise immédiatement.
@@ -112,9 +93,10 @@ export function EmbeddedSignupButton({
     return () => window.removeEventListener("message", onMessage);
   }, [initFb, ready]);
 
-  const launch = useCallback(() => {
+  const launch = useCallback((chosen: SignupMode) => {
     if (!window.FB) return;
     sessionRef.current = {};
+    setMode(chosen);
     setStatus({ kind: "working" });
     window.FB.login(
       (res) => {
@@ -136,7 +118,7 @@ export function EmbeddedSignupButton({
           });
           return;
         }
-        finishEmbeddedSignup({ storeId, code, phoneNumberId: phoneNumberId ?? "", wabaId })
+        finishEmbeddedSignup({ storeId, code, phoneNumberId: phoneNumberId ?? "", wabaId, mode: chosen })
           .then((r) => {
             if (r.ok) {
               setStatus({ kind: "done", message: r.message ?? "WhatsApp connecté." });
@@ -152,8 +134,8 @@ export function EmbeddedSignupButton({
         config_id: configId,
         response_type: "code",
         override_default_response_type: true,
-        // version v4 : doit correspondre à la configuration Embedded Signup créée chez Meta (« ES Config », v4).
-        extras: { setup, featureType: "", sessionInfoVersion: "3", version: "v4" },
+        // Coexistence : featureType « whatsapp_business_app_onboarding » ; le pré-remplissage reste envoyé.
+        extras: buildLoginExtras(setup, chosen),
       },
     );
   }, [configId, router, setup, storeId]);
@@ -168,13 +150,43 @@ export function EmbeddedSignupButton({
       />
       {status.kind === "error" && <Alert tone="danger" title="Connexion impossible">{status.message}</Alert>}
       {status.kind === "done" && <Alert tone="success" title="Numéro connecté">{status.message}</Alert>}
-      <Button type="button" variant={connected ? "secondary" : "primary"} onClick={launch} loading={status.kind === "working"} disabled={!ready}>
-        <MessageCircle className="size-4" aria-hidden /> {connected ? "Changer de numéro" : "Connecter avec WhatsApp"}
-      </Button>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-2 rounded-[var(--radius-md)] p-4 ring-1 ring-line">
+          <Button
+            type="button"
+            variant={connected ? "secondary" : "primary"}
+            className="min-h-11 w-full"
+            onClick={() => launch("coexistence")}
+            loading={status.kind === "working" && mode === "coexistence"}
+            disabled={!ready || status.kind === "working"}
+          >
+            <Smartphone className="size-4" aria-hidden /> J&apos;utilise déjà WhatsApp Business
+          </Button>
+          <p className="text-xs leading-relaxed text-ink-muted">
+            Recommandé : vous gardez l&apos;application sur votre téléphone, avec le même numéro. Contacts et historique sont importés.
+            Application WhatsApp Business 2.24.17 ou plus récente requise.
+          </p>
+        </div>
+        <div className="space-y-2 rounded-[var(--radius-md)] p-4 ring-1 ring-line">
+          <Button
+            type="button"
+            variant="secondary"
+            className="min-h-11 w-full"
+            onClick={() => launch("standard")}
+            loading={status.kind === "working" && mode === "standard"}
+            disabled={!ready || status.kind === "working"}
+          >
+            <MessageCircle className="size-4" aria-hidden /> Connecter un nouveau numéro
+          </Button>
+          <p className="text-xs leading-relaxed text-ink-muted">
+            Numéro dédié à l&apos;API, non utilisé dans une application WhatsApp. Vérification par code SMS.
+          </p>
+        </div>
+      </div>
       <p className="text-xs leading-relaxed text-ink-muted">
         {connected
           ? "Pour connecter un autre numéro, relancez la fenêtre Meta : le nouveau numéro remplacera l'actuel."
-          : "Une fenêtre Meta s'ouvre, déjà pré-remplie avec les informations de votre boutique : connectez-vous à Facebook, vérifiez-les, puis saisissez le code reçu par SMS. Aucun identifiant à recopier."}
+          : "Une fenêtre Meta s'ouvre, déjà pré-remplie avec les informations de votre boutique : connectez-vous à Facebook, vérifiez-les puis validez. Aucun identifiant à recopier."}
       </p>
     </div>
   );
