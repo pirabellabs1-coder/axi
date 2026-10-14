@@ -13,12 +13,12 @@ const rate = (s: string) => parseRate(s)!;
 describe("tarification des domaines", () => {
   it("marge en pourcentage du coût de gros", () => {
     // 13 $ × 20 % = 2,60 $ > minimum 1 $
-    expect(usdTotals(1300, 1, { percentBps: 2000, minUsdCentsPerYear: 100 })).toEqual({ costUsdCents: 1300, marginUsdCents: 260, totalUsdCents: 1560 });
+    expect(usdTotals(1300, 1, { percentBps: 2000, minUsdCentsPerYear: 100 })).toEqual({ costUsdCents: 1900, marginUsdCents: 380, totalUsdCents: 2280 }) // 13 $ + 6 $ de zone DNS;
   });
 
   it("minimum de marge par année quand le pourcentage est trop faible", () => {
     // 13 $ × 10 % = 1,30 $ < minimum 5 $ (× 2 ans = 10 $)
-    expect(usdTotals(1300, 2, { percentBps: 1000, minUsdCentsPerYear: 500 })).toEqual({ costUsdCents: 2600, marginUsdCents: 1000, totalUsdCents: 3600 });
+    expect(usdTotals(1300, 2, { percentBps: 1000, minUsdCentsPerYear: 500 })).toEqual({ costUsdCents: 3800, marginUsdCents: 1000, totalUsdCents: 4800 });
   });
 
   it("refuse un coût ou une durée invalides", () => {
@@ -29,18 +29,18 @@ describe("tarification des domaines", () => {
 
   it("USD : arrondi supérieur à l'unité entière, marge = prix − coût", () => {
     const p = priceDomain({ wholesaleUsdCentsPerYear: 1300, years: 1, currency: "USD", rate: ONE, margin: { percentBps: 2000, minUsdCentsPerYear: 100 } });
-    expect(p.price).toBe(1600); // 15,60 $ → 16,00 $
-    expect(p.cost).toBe(1300);
-    expect(p.margin).toBe(300);
+    expect(p.price).toBe(2300); // (13 + 6) $ + 20 % = 22,80 $ → 23,00 $
+    expect(p.cost).toBe(1900);
+    expect(p.margin).toBe(400);
     expect(p.fxRate).toBeNull();
   });
 
   it("EUR (devise à centimes) : conversion exacte puis unité entière supérieure", () => {
     // 1 USD = 0,92 EUR ; total 15,60 $ = 14,352 € → 15,00 €
     const p = priceDomain({ wholesaleUsdCentsPerYear: 1300, years: 1, currency: "EUR", rate: rate("0.92"), margin: { percentBps: 2000, minUsdCentsPerYear: 100 } });
-    expect(p.price).toBe(1500);
-    expect(p.cost).toBe(1196); // 13 × 0,92 = 11,96 €
-    expect(p.margin).toBe(304);
+    expect(p.price).toBe(2100); // 22,80 $ × 0,92 = 20,98 € → 21 €
+    expect(p.cost).toBe(1748); // 19 × 0,92 = 17,48 €
+    expect(p.margin).toBe(352);
     expect(p.fxRate).toBe("0.9200000000");
   });
 
@@ -49,11 +49,11 @@ describe("tarification des domaines", () => {
     const usdXof = mul(invert(rate("1.08")), FIXED_EUR_PARITIES.XOF);
     const p = priceDomain({ wholesaleUsdCentsPerYear: 1300, years: 1, currency: "XOF", rate: usdXof, margin: { percentBps: 2000, minUsdCentsPerYear: 500 } });
     // marge = max(2,60 $, 5 $) = 5 $ ; total 18 $ × 607,367… = 10 932,6 → 11 000 FCFA
-    expect(p.totalUsdCents).toBe(1800);
-    expect(p.price).toBe(11_000);
+    expect(p.totalUsdCents).toBe(2400); // 19 $ de coût + 5 $ de marge minimale
+    expect(p.price).toBe(14_600); // 24 $ = 14 576,9 FCFA → 14 600
     expect(p.price % 100).toBe(0);
-    expect(p.cost).toBe(7896); // 13 $ = 7 895,8 FCFA
-    expect(p.margin).toBe(11_000 - 7896);
+    expect(p.cost).toBe(11_540); // 19 $ (13 $ + zone DNS 6 $) ≈ 11 540 FCFA
+    expect(p.margin).toBe(14_600 - 11_540);
   });
 
   it("JPY (sans décimales) : multiple de 100 yens", () => {

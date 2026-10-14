@@ -1,7 +1,9 @@
 /**
  * Tarification des noms de domaine (module PUR, testé : tests/domains-registration.test.ts).
  *
- *   coût de gros     = prix Route 53 (USD, centimes) × années
+ *   coût de gros     = (prix Route 53 + zone DNS hébergée ~6 $/an) (USD, centimes) × années
+ *                      — la zone Route 53 (0,50 $/mois) est facturée par AWS pour chaque domaine : sans elle,
+ *                        un .com à marge minimale serait vendu à perte.
  *   marge (USD)      = max(coût × pourcentage, minimum par année × années)
  *   total (USD)      = coût + marge
  *   prix marchand    = total converti dans la devise de la boutique (taux plateforme BCE, src/lib/currency),
@@ -22,6 +24,9 @@ export type MarginSettings = {
   minUsdCentsPerYear: number;
 };
 
+/** Coût annuel de la zone DNS hébergée Route 53 créée pour chaque domaine (0,50 $/mois). */
+export const HOSTED_ZONE_USD_CENTS_PER_YEAR = 600;
+
 export const DEFAULT_MARGIN: MarginSettings = { percentBps: 2000, minUsdCentsPerYear: 500 };
 export const MAX_MARGIN_BPS = 30_000; // 300 %
 export const MAX_YEARS = 10;
@@ -39,7 +44,7 @@ export function normalizeMargin(raw: Partial<MarginSettings> | null | undefined)
 export function usdTotals(wholesaleUsdCentsPerYear: number, years: number, margin: MarginSettings) {
   if (!Number.isInteger(wholesaleUsdCentsPerYear) || wholesaleUsdCentsPerYear <= 0) throw new Error("Coût de gros invalide");
   if (!Number.isInteger(years) || years < 1 || years > MAX_YEARS) throw new Error("Durée invalide");
-  const cost = wholesaleUsdCentsPerYear * years;
+  const cost = (wholesaleUsdCentsPerYear + HOSTED_ZONE_USD_CENTS_PER_YEAR) * years;
   const pct = Number(roundHalfUp(BigInt(cost) * BigInt(margin.percentBps), BigInt(10_000)));
   const marginUsd = Math.max(pct, margin.minUsdCentsPerYear * years);
   return { costUsdCents: cost, marginUsdCents: marginUsd, totalUsdCents: cost + marginUsd };
