@@ -6,7 +6,7 @@ import { MEDIA, unsplash } from "@/config/media";
 /** Appel à l'action final : bloc forêt avec photo, réutilisé en bas des pages marketing. */
 export function CtaBand({
   title = "Ouvrez votre boutique aujourd'hui.",
-  description = `Gratuit pour commencer, ${TRIAL_DAYS} jours de Business offerts, sans carte bancaire.`,
+  description = `${TRIAL_DAYS} jours d'essai gratuit de Business, sans carte bancaire.`,
   primaryLabel = "Créer ma boutique",
   primaryHref = "/inscription",
   secondaryLabel = "Voir les tarifs",

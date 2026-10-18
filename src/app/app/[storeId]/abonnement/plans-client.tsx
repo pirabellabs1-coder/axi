@@ -31,11 +31,6 @@ function confirmCopy(q: QuoteDTO): { title: string; description: string; label: 
   const plan = PLANS[q.planId];
   const period = q.interval === "YEARLY" ? "annuel" : "mensuel";
   const hidden = q.hiddenProducts > 0 ? ` ${q.hiddenProducts} produit${q.hiddenProducts > 1 ? "s" : ""} au-delà de la limite passer${q.hiddenProducts > 1 ? "ont" : "a"} en brouillon (masqué${q.hiddenProducts > 1 ? "s" : ""}, jamais supprimé${q.hiddenProducts > 1 ? "s" : ""}).` : "";
-  if (q.planId === "FREE") {
-    return q.kind === "downgrade"
-      ? { title: "Passer au plan Gratuit ?", description: `Votre plan actuel reste actif jusqu'au ${fmtDate(q.effectiveAt)}, puis la boutique passe au plan Gratuit. Aucune donnée n'est supprimée.${hidden}`, label: "Programmer le passage" }
-      : { title: "Passer au plan Gratuit ?", description: `Changement immédiat. Vos données sont conservées, les fonctions payantes se verrouillent.${hidden}`, label: "Passer au plan Gratuit" };
-  }
   if (q.kind === "downgrade") {
     return { title: `Passer au plan ${plan.name} (${period}) ?`, description: `Vous gardez votre plan actuel jusqu'au ${fmtDate(q.effectiveAt)}. Le plan ${plan.name} démarre ensuite, au prix de ${formatMoney(q.gross, q.currency)}.${hidden}`, label: "Programmer le changement" };
   }
@@ -72,7 +67,8 @@ export function PlanComparison({
 }) {
   const [interval, setInterval] = useState<Interval>(currentInterval);
   const [coupon, setCoupon] = useState("");
-  const selfServe = plans.filter((p) => p.id !== "ENTERPRISE");
+  // Plus de plan Gratuit : seuls les plans vendables arrivent ici (PUBLIC_PLANS, côté serveur).
+  const selfServe = plans.filter((p) => p.id !== "ENTERPRISE" && p.id !== "FREE");
   const enterprise = plans.find((p) => p.id === "ENTERPRISE");
 
   return (
@@ -115,7 +111,7 @@ export function PlanComparison({
         </div>
       </details>
 
-      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {selfServe.map((p) => {
           const plan = PLANS[p.id];
           const q = quotes.find((x) => x.planId === p.id && x.interval === interval);
@@ -139,12 +135,11 @@ export function PlanComparison({
 
               <div className="mt-5">
                 <p className="flex items-baseline gap-1 text-ink">
-                  <span className="text-[30px] font-semibold leading-none tracking-[-0.04em] tabular">{price == null ? "Sur devis" : price === 0 ? "0" : formatMoney(price, currency)}</span>
-                  {price === 0 && <span className="text-sm text-ink-muted">{currency === "XOF" ? "FCFA" : "€"}</span>}
+                  <span className="text-[30px] font-semibold leading-none tracking-[-0.04em] tabular">{price == null ? "Sur devis" : formatMoney(price, currency)}</span>
                   {price != null && <span className="text-sm text-ink-muted">/ mois</span>}
                 </p>
                 <p className="mt-1.5 min-h-5 text-xs text-ink-muted tabular">
-                  {interval === "YEARLY" && p.yearly ? `Facturé ${formatMoney(p.yearly, currency)} par an` : p.monthly === 0 ? "Pour toujours" : "Sans engagement"}
+                  {interval === "YEARLY" && p.yearly ? `Facturé ${formatMoney(p.yearly, currency)} par an` : "Sans engagement"}
                 </p>
               </div>
 
@@ -206,7 +201,7 @@ export function PlanComparison({
 
 function PlanCta({ storeId, quote, label, highlight, coupon }: { storeId: string; quote: QuoteDTO; label: string; highlight: boolean; coupon: string }) {
   const base = confirmCopy(quote);
-  const withCoupon = !!coupon && quote.kind !== "downgrade" && quote.planId !== "FREE";
+  const withCoupon = !!coupon && quote.kind !== "downgrade";
   const copy = withCoupon ? { ...base, description: `${base.description} Code promo ${coupon.toUpperCase()} : la remise est vérifiée et déduite sur la facture.` } : base;
   return (
     <div>
@@ -244,7 +239,7 @@ export function CancelControls({ storeId, cancelAtPeriodEnd }: { storeId: string
   ) : (
     <ConfirmActionButton
       title="Résilier l'abonnement ?"
-      description="Votre plan reste actif jusqu'à la fin de la période payée, puis la boutique passe au plan Gratuit. Aucune donnée n'est supprimée ; les produits au-delà de 15 passent en brouillon."
+      description="Votre plan reste actif jusqu'à la fin de la période payée, puis la boutique est mise en pause (vitrine fermée). Aucune donnée n'est supprimée : elle rouvre dès que vous choisissez et payez un plan."
       confirmLabel="Résilier en fin de période"
       action={() => setCancelAtPeriodEnd(storeId, true)}
       className="inline-flex h-11 items-center rounded-full px-4 text-sm font-medium text-danger transition-colors hover:bg-danger-soft"

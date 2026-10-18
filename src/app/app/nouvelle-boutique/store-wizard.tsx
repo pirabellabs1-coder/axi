@@ -24,8 +24,10 @@ export type WizardProps = {
   domain: string;
   countries: WizardCountry[];
   zoneLabel: Record<Zone, string>;
-  /** Première boutique : essai du plan payant ; sinon plan Gratuit. */
+  /** Première boutique du compte : essai de 14 jours sans carte ; sinon boutique couverte par l'abonnement du compte. */
   firstStore: boolean;
+  /** Plan du compte (boutique principale), repris par une boutique supplémentaire. */
+  accountPlanName?: string;
   trial: { planName: string; days: number; price: Record<Zone, string> };
   doneForYou: { name: string; description: string; price: Record<Zone, string> };
 };
@@ -42,7 +44,7 @@ const FIELD_STEP: Record<string, number> = { name: 1, slug: 1, country: 2, curre
 
 type Avail = { available: boolean; reason?: string } | null;
 
-export function StoreWizard({ domain, countries, zoneLabel, firstStore, trial, doneForYou }: WizardProps) {
+export function StoreWizard({ domain, countries, zoneLabel, firstStore, accountPlanName, trial, doneForYou }: WizardProps) {
   const [state, action] = useActionState(createStore, undefined);
   const [seenState, setSeenState] = useState(state);
   const [step, setStep] = useState(1);
@@ -292,7 +294,9 @@ export function StoreWizard({ domain, countries, zoneLabel, firstStore, trial, d
                   <p className="mt-0.5 opacity-85">
                     {firstStore
                       ? `${trial.planName} offert ${trial.days} jours, puis ${trial.price[zone]} par mois si vous continuez. Sans carte bancaire.`
-                      : "Cette boutique démarre sur le plan Gratuit. Vous pourrez la passer à un plan payant à tout moment."}
+                      : accountPlanName
+                        ? `Cette boutique est couverte par l'abonnement de votre compte (plan ${accountPlanName}) : même plan, même échéance, sans facture séparée.`
+                        : "Votre essai gratuit a déjà été utilisé : cette boutique démarre sans plan. Vous choisirez un plan juste après la création pour l'ouvrir."}
                   </p>
                 </div>
               </div>
@@ -419,7 +423,7 @@ export function StoreWizard({ domain, countries, zoneLabel, firstStore, trial, d
                   { label: "Pays", value: `${selectedCountry?.name ?? ""}${city ? `, ${city}` : ""}` },
                   { label: "Devise des prix", value: currency },
                   { label: "Secteur", value: sectorOption?.label ?? "" },
-                  { label: "Formule", value: firstStore ? `Essai ${trial.planName}, ${trial.days} jours` : "Gratuit" },
+                  { label: "Formule", value: firstStore ? `Essai gratuit ${trial.planName}, ${trial.days} jours` : (accountPlanName ? `Plan ${accountPlanName} du compte` : "Sans plan (à choisir)") },
                   { label: "Zone tarifaire", value: zoneLabel[zone] },
                   { label: "Création clé en main", value: dfy ? <Badge tone="primary">Demandée</Badge> : "Non" },
                 ]}

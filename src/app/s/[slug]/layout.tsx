@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { preconnect } from "react-dom";
 import { notFound } from "next/navigation";
-import { getStorefront } from "@/lib/storefront/data";
+import { getPausedStorefront, getStorefront } from "@/lib/storefront/data";
+import { PausedStorefront } from "@/components/storefront/paused-storefront";
 import { getThemeDocument } from "@/lib/theme-engine/resolve";
 import { storeFontClassName } from "@/lib/theme-engine/fonts";
 import { themeCssVars } from "@/lib/storefront/theme-doc";
@@ -35,7 +36,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const sf = await getStorefront(slug);
   const store = sf?.store;
-  if (!store) return { title: "Boutique introuvable" };
+  if (!store) {
+    const paused = await getPausedStorefront(slug);
+    if (paused) return { title: `${paused.name} : boutique momentanément fermée`, robots: { index: false, follow: false } };
+    return { title: "Boutique introuvable" };
+  }
   const doc = getThemeDocument(store);
   const share = doc.settings.social.shareImage?.url ?? store.bannerUrl ?? store.logoUrl ?? undefined;
   const image = shareableImageUrl(share);
@@ -62,7 +67,13 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 export default async function StoreLayout({ children, params }: Props) {
   const { slug } = await params;
   const sf = await getStorefront(slug);
-  if (!sf) notFound();
+  if (!sf) {
+    // Boutique en pause (abonnement) : page de fermeture à la place de TOUTES les pages (catalogue, produit, panier,
+    // commande…), qui ne sont jamais rendues. Les membres gardent l'aperçu (getStorefront, statut non public).
+    const paused = await getPausedStorefront(slug);
+    if (paused) return <PausedStorefront name={paused.name} logoUrl={paused.logoUrl} />;
+    notFound();
+  }
   const doc = getThemeDocument(sf.store, { preview: !!sf.preview?.draft });
   // React place ces <link rel="preconnect"> dans le <head> (images : requêtes sans CORS, pas de crossOrigin).
   for (const origin of imageOrigins()) preconnect(origin);

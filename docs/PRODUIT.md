@@ -44,16 +44,17 @@ La zone est déduite de la devise de la boutique (`zoneForCurrency`) et figée s
 
 | Plan | Pour qui | Monde, par mois | Afrique, par mois | Points clés |
 |---|---|---|---|---|
-| **Gratuit** | tester | 0 € | 0 FCFA | 15 produits, 20 commandes par mois, lien WhatsApp, paiement manuel, logo Axi |
 | **Starter** | vendeur seul | 9 € | 5 000 FCFA | commandes illimitées, 200 produits, Mobile Money et carte, stock, coupons, créneaux |
 | **Business** (recommandé) | boutique qui grandit | 29 € | 15 000 FCFA | produits illimités, 3 membres, domaine, WhatsApp officiel et boîte partagée (300 messages), entonnoir, campagnes, fidélité, avis, 50 crédits IA |
 | **Scale** | marque multicanal | 79 € | 45 000 FCFA | 3 boutiques, 10 membres, automatisations illimitées, paniers abandonnés, 1 500 messages, 500 crédits IA, rôles, audit, API, caisse |
 | **Enterprise** | agences, franchises | dès 199 € | dès 130 000 FCFA | illimité, revendeurs, SLA, gestionnaire dédié. **Sur devis**, jamais en libre-service |
 
 - **Annuel : 10 mois payés pour 12** (`YEARLY_MONTHS_PAID`).
-- **Essai** : 14 jours de Business à l'inscription, sans carte. À la fin : retour sur Gratuit, sans perte de données (les produits au-delà de la limite passent en brouillon, jamais supprimés).
+- **Plus de plan Gratuit (décision du 18/10/2026)**. La valeur `FREE` reste en base comme niveau interne « sans plan » (jamais vendu : `PUBLIC_PLANS`, `isSellablePlan`, refus serveur dans `changePlan`).
+- **Essai** : 14 jours de Business à la création de la première boutique du compte, sans carte. Rappels e-mail + in-app à J-3 et J-1, idempotents. À la fin, sans plan payant : **boutique en pause** (abonnement `PAUSED`, boutique `PAUSED`, statut précédent dans `statusBeforePause`) : vitrine « Boutique momentanément fermée » (`noindex`, ni catalogue ni commande), espace marchand accessible avec bandeau et lien direct vers le choix du plan, intégrations sortantes coupées (campagnes, automatisations et relances, synchros catalogue, TikTok Shop, push, réservations live). Rien n'est supprimé ; la boutique rouvre automatiquement à la confirmation du paiement. Même règle pour une résiliation arrivée à échéance et un impayé au-delà de la grâce. Code : `src/lib/billing/pause.ts`.
+- **Boutiques supplémentaires** (place incluse dans le plan ou option « Boutique en plus ») : couvertes par l'abonnement de la boutique principale du compte (`Subscription.coveredBySubscriptionId`) : même plan, même essai, même échéance, même pause ; pas de second essai ni de facture propre (la place est payée par l'option).
 - **Changement de plan** : montée effective dès le paiement de la facture (l'essai et le plan actuel restent actifs en attendant), avec crédit au prorata du temps restant (arrondi à l'unité inférieure, `prorationCredit`) ; descente en fin de période.
-- **Renouvellement** : pas de prélèvement automatique en Mobile Money. Une facture de renouvellement est émise 3 jours avant l'échéance (`RENEWAL_LINK_DAYS_BEFORE`). Impayé : `PAST_DUE` à l'échéance, `SUSPENDED` après 7 jours de grâce (fonctions payantes coupées, données conservées).
+- **Renouvellement** : pas de prélèvement automatique en Mobile Money. Une facture de renouvellement est émise 3 jours avant l'échéance (`RENEWAL_LINK_DAYS_BEFORE`). Impayé : `PAST_DUE` à l'échéance, `SUSPENDED` après 7 jours de grâce (boutique en pause, données conservées).
 
 ### 4.3 Options payantes
 
@@ -83,7 +84,7 @@ Trois portefeuilles par boutique : messages WhatsApp utilitaires, messages Whats
 
 ### 4.5 Ouverture progressive des plans
 
-1. **Pilote (Bénin, Côte d'Ivoire, Sénégal, Togo)** : Gratuit, Starter et Business en libre-service, factures réglées manuellement (Mobile Money sur le numéro de la plateforme, confirmation admin). Packs de crédits ouverts.
+1. **Pilote (Bénin, Côte d'Ivoire, Sénégal, Togo)** : Essai de 14 jours, puis Starter et Business en libre-service, factures réglées manuellement (Mobile Money sur le numéro de la plateforme, confirmation admin). Packs de crédits ouverts.
 2. **API WhatsApp officielle validée par Meta** : Scale en libre-service (automatisations, paniers abandonnés), option numéro WhatsApp en plus.
 3. **Paiement en ligne des abonnements** (FedaPay ou KkiaPay en zone Afrique, Stripe en zone Monde) : renouvellement en un clic, la confirmation admin devient l'exception.
 4. **Enterprise** : uniquement sur devis, contrat et SLA négociés.

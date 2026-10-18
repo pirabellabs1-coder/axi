@@ -35,7 +35,7 @@ export default async function AppTestsPage({ params }: { params: Promise<{ store
         <EmptyState
           icon={Store}
           title="Aucune boutique de test disponible"
-          description="Créez une boutique (gratuite) depuis votre espace marchand, ou demandez à un marchand de vous inviter comme collaborateur développeur."
+          description="Créez une boutique (14 jours d'essai gratuit) depuis votre espace marchand, ou demandez à un marchand de vous inviter comme collaborateur développeur."
         />
       ) : (
         <Card>

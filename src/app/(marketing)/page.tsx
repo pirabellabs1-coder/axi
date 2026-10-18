@@ -50,8 +50,8 @@ const FAQ = [
     a: "Non, sur aucun plan, essai compris. Vos clients vous paient directement : Mobile Money, carte via votre propre compte de paiement, espèces ou virement. Axi se finance uniquement par les abonnements et les options. Restent les frais de votre opérateur ou de votre prestataire de paiement, qui ne passent jamais par nous.",
   },
   {
-    q: "Puis-je vraiment commencer gratuitement ?",
-    a: `Oui. Le plan Gratuit n'a pas de limite de durée : ${PLANS.FREE.limits.products} produits et ${PLANS.FREE.limits.ordersPerMonth} commandes par mois. À l'inscription, vous profitez en plus de ${TRIAL_DAYS} jours du plan Business, sans carte bancaire. À la fin de l'essai, vous revenez sur le Gratuit sans perdre vos données.`,
+    q: "Puis-je essayer avant de payer ?",
+    a: `Oui. À l'inscription, vous profitez de ${TRIAL_DAYS} jours d'essai gratuit du plan Business, sans carte bancaire. Vous êtes prévenu 3 jours puis 1 jour avant la fin. Sans plan choisi, la boutique est mise en pause (vitrine fermée) sans perdre aucune donnée, et rouvre dès le paiement.`,
   },
   {
     q: "Pourquoi des prix en euros et en FCFA ?",
@@ -63,7 +63,7 @@ const FAQ = [
   },
   {
     q: "Et si je veux arrêter ?",
-    a: "Vous revenez au plan Gratuit ou vous fermez votre compte. Une descente de plan prend effet en fin de période payée. Vos données s'exportent en CSV (commandes dès Starter, produits et clients dès Business, sur demande au support pour le Gratuit), et rien n'est supprimé sans votre demande.",
+    a: "Vous résiliez en un clic : votre plan reste actif jusqu'à la fin de la période payée, puis la boutique est mise en pause. Vos données s'exportent en CSV (commandes dès Starter, produits et clients dès Business, sur demande au support sinon), et rien n'est supprimé sans votre demande.",
   },
 ];
 
@@ -408,7 +408,7 @@ function PricingSummary() {
             id="pricing-title"
             eyebrow="Tarifs"
             title="Un prix fixe. Aucune commission."
-            description={`Commencez gratuitement, essayez Business ${TRIAL_DAYS} jours. Prix en euros, ou en FCFA pour l'Afrique francophone.`}
+            description={`${TRIAL_DAYS} jours d'essai gratuit, sans carte bancaire. Prix en euros, ou en FCFA pour l'Afrique francophone.`}
           />
           <div className="reveal flex flex-wrap gap-3">
             <ZoneSwitch />

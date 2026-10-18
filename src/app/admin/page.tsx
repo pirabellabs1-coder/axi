@@ -102,6 +102,8 @@ export default async function AdminHome() {
     return { key: t.storeId, label: s?.name ?? "Boutique", value: t._count._all, display: `${t._count._all} cmd`, hint: s ? `${formatMoney(t._sum.total ?? 0, s.currency)} de ventes${s.city ? `, ${s.city}` : ""}` : undefined, href: `/admin/boutiques/${t.storeId}` };
   });
 
+  // Boutiques en pause (plus de plan Gratuit : fin d'essai, résiliation ou impayé), relances commerciales possibles.
+  const storesPaused = await db.store.count({ where: { status: "PAUSED" } });
   const alerts = [
     overdueInvoices > 0 && { href: "/admin/abonnements?status=OPEN", label: `${overdueInvoices} facture${overdueInvoices > 1 ? "s" : ""} en retard de paiement`, icon: Receipt, tone: "danger" as const },
     openReports > 0 && { href: "/admin/signalements", label: `${openReports} signalement${openReports > 1 ? "s" : ""} à examiner`, icon: Flag, tone: "danger" as const },
@@ -111,6 +113,7 @@ export default async function AdminHome() {
     openTickets > 0 && { href: "/admin/tickets", label: `${openTickets} ticket${openTickets > 1 ? "s" : ""} à traiter`, icon: LifeBuoy, tone: "neutral" as const },
     pendingAddOns > 0 && { href: "/admin/options?status=PENDING", label: `${pendingAddOns} option${pendingAddOns > 1 ? "s" : ""} en attente de paiement`, icon: Puzzle, tone: "neutral" as const },
     trialsEndingSoon > 0 && { href: "/admin/abonnements?sub=TRIALING", label: `${trialsEndingSoon} essai${trialsEndingSoon > 1 ? "s" : ""} se termine${trialsEndingSoon > 1 ? "nt" : ""} sous 4 jours`, icon: Repeat, tone: "neutral" as const },
+    storesPaused > 0 && { href: "/admin/boutiques?status=PAUSED", label: `${storesPaused} boutique${storesPaused > 1 ? "s" : ""} en pause (sans plan actif)`, icon: AlertTriangle, tone: "neutral" as const },
     storesSuspended > 0 && { href: "/admin/boutiques?status=SUSPENDED", label: `${storesSuspended} boutique${storesSuspended > 1 ? "s" : ""} suspendue${storesSuspended > 1 ? "s" : ""}`, icon: AlertTriangle, tone: "neutral" as const },
   ].filter(Boolean) as { href: string; label: string; icon: typeof Receipt; tone: "danger" | "warning" | "neutral" }[];
 

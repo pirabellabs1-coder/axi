@@ -2,7 +2,7 @@
 
 import { Fragment, useState } from "react";
 import { Check, ChevronDown, Minus } from "lucide-react";
-import { COMPARISON, PLANS, PLAN_ORDER, type PlanId } from "@/config/plans";
+import { COMPARISON, PLANS, PUBLIC_PLANS, type PlanId } from "@/config/plans";
 import { displayPlanPrice } from "@/lib/marketing/pricing";
 import { usePricing } from "@/components/marketing/pricing-context";
 import { cn } from "@/lib/utils";
@@ -63,7 +63,7 @@ export function PricingComparison() {
               <th scope="col" className="sticky top-[88px] z-10 w-[32%] border-b border-line bg-surface py-5 pr-4 text-left align-bottom text-[13px] font-medium text-ink-muted">
                 Fonctionnalité
               </th>
-              {PLAN_ORDER.map((id) => (
+              {PUBLIC_PLANS.map((id) => (
                 <th key={id} scope="col" className={cn("sticky top-[88px] z-10 border-b border-line bg-surface px-3 py-5 text-center align-bottom", PLANS[id].highlight && "shadow-[inset_0_3px_0_var(--c-accent)]")}>
                   <span className="block text-[15px] font-semibold text-ink">{PLANS[id].name}</span>
                   <span className="mt-1 block text-[12.5px] font-normal text-ink-muted tabular">
@@ -80,7 +80,7 @@ export function PricingComparison() {
               <Fragment key={group.title}>
               <tbody>
                 <tr>
-                  <th scope="rowgroup" colSpan={PLAN_ORDER.length + 1} className="pt-10 text-left">
+                  <th scope="rowgroup" colSpan={PUBLIC_PLANS.length + 1} className="pt-10 text-left">
                     <button
                       type="button"
                       onClick={() => toggle(group.title)}
@@ -100,7 +100,7 @@ export function PricingComparison() {
                     <th scope="row" className="border-b border-line py-3.5 pr-4 text-left font-normal text-ink">
                       {row.label}
                     </th>
-                    {PLAN_ORDER.map((id) => (
+                    {PUBLIC_PLANS.map((id) => (
                       <td key={id} className={cn("border-b border-line px-3 py-3.5 text-center", PLANS[id].highlight && "bg-accent-soft/50")}>
                         <CellValue value={row.values[id]} />
                       </td>
@@ -119,7 +119,7 @@ export function PricingComparison() {
         <fieldset className="min-w-0">
           <legend className="text-sm font-medium text-ink">Afficher le détail du plan</legend>
           <div className="scrollbar-none relative -mx-4 mt-2 flex gap-2 overflow-x-auto px-4 py-1">
-            {PLAN_ORDER.map((id) => {
+            {PUBLIC_PLANS.map((id) => {
               const active = id === mobilePlan;
               return (
                 <label

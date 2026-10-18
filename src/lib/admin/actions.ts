@@ -64,8 +64,12 @@ export async function reactivateStore(storeId: string, reason: string): Promise<
     // Une boutique déjà publiée avant suspension revient en ligne ; sinon elle repasse en brouillon.
     const next = store.publishedAt ? "PUBLISHED" : "DRAFT";
     await db.$transaction(async (tx) => {
-      await tx.store.update({ where: { id: storeId }, data: { status: next, statusReason: null } });
-      await audit({ storeId, actorId: admin.id, action: "admin.store.reactivated", target: storeId, metadata: { reason: parsed.data.reason, newStatus: next } }, tx);
+      await tx.store.update({ where: { id: storeId }, data: { status: next, statusReason: null, statusBeforePause: null } });
+      // Sans plan ouvrant droit (essai échu, résiliation, impayé) : la réactivation ne remet PAS en ligne sans
+      // paiement, la boutique repasse en pause (statut `next` restauré au paiement).
+      const { reconcileStorePause } = await import("@/lib/billing/pause");
+      const outcome = await reconcileStorePause(tx, storeId);
+      await audit({ storeId, actorId: admin.id, action: "admin.store.reactivated", target: storeId, metadata: { reason: parsed.data.reason, newStatus: outcome === "paused" ? "PAUSED" : next } }, tx);
     });
     revalidateStore(storeId);
     return success(undefined, "Boutique réactivée");
@@ -213,7 +217,7 @@ export async function voidInvoice(invoiceId: string): Promise<ActionResult> {
   });
 }
 
-const SUB_STATUSES: SubscriptionStatus[] = ["TRIALING", "ACTIVE", "PAST_DUE", "SUSPENDED", "CANCELLED"];
+const SUB_STATUSES: SubscriptionStatus[] = ["TRIALING", "ACTIVE", "PAST_DUE", "SUSPENDED", "PAUSED", "CANCELLED"];
 
 export async function setSubscriptionStatus(subscriptionId: string, status: SubscriptionStatus): Promise<ActionResult> {
   return guard(async () => {
@@ -226,6 +230,11 @@ export async function setSubscriptionStatus(subscriptionId: string, status: Subs
       await tx.subscription.update({ where: { id: subscriptionId }, data: { status } });
       await enqueue("subscription.changed", { storeId: sub.storeId, subscriptionId, planId: sub.planId, status }, { storeId: sub.storeId }, tx);
       await audit({ storeId: sub.storeId, actorId: admin.id, action: "admin.subscription.status_changed", target: subscriptionId, metadata: { from: sub.status, to: status } }, tx);
+      // Boutique en pause / rouverte selon le nouvel état (et boutiques couvertes par cet abonnement).
+      const { reconcileStorePause, syncCoveredSubscriptions } = await import("@/lib/billing/pause");
+      await tx.subscription.update({ where: { id: subscriptionId }, data: { pausedAt: status === "PAUSED" ? new Date() : null } });
+      await reconcileStorePause(tx, sub.storeId);
+      await syncCoveredSubscriptions(subscriptionId, tx);
     });
     revalidatePath("/admin/abonnements");
     revalidatePath("/admin");

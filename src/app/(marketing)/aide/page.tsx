@@ -323,7 +323,7 @@ const GUIDES: Guide[] = [
       },
       {
         q: "Que se passe-t-il à la fin de l'essai ?",
-        a: <p>Votre boutique repasse automatiquement sur le plan Gratuit. Rien n&apos;est supprimé : produits, clients et commandes restent accessibles et exportables. Les fonctions Business sont simplement mises en pause jusqu&apos;à un abonnement.</p>,
+        a: <p>Vous recevez un rappel 3 jours puis 1 jour avant la fin. Sans plan payant à la date de fin, votre boutique est mise en pause : vos clients voient « Boutique momentanément fermée » et ne peuvent plus commander. Rien n&apos;est supprimé : votre espace reste accessible, et la boutique rouvre automatiquement dès que le paiement de votre plan est confirmé.</p>,
       },
       {
         q: "Payer ou changer mon abonnement",

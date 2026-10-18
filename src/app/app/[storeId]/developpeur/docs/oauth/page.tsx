@@ -148,7 +148,7 @@ export function verifyInstallHmac(searchParams, signingSecret, toleranceSec = ${
         rows={SCOPES.map((s) => [<C key={s}>{s}</C>, SCOPE_LABELS[s].write ? "Écriture" : "Lecture", SCOPE_LABELS[s].description])}
       />
       <OL>
-        <li>Gratuit : lecture seule ; Starter : + catalogue, stock, commandes, contenus ; Business et plus : tous les scopes.</li>
+        <li>Sans plan actif : lecture seule ; Starter : + catalogue, stock, commandes, contenus ; Business et plus : tous les scopes.</li>
         <li>Les scopes accordés ne dépassent jamais le plan de la boutique ; un changement de plan s&apos;applique immédiatement.</li>
       </OL>
       <NextLink slug="api" />

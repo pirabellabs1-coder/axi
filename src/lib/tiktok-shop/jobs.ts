@@ -31,6 +31,16 @@ export const handlers: JobHandlers = {
     if (!storeId || !orderId) return;
     await (await import("./sync")).importOrderById(storeId, orderId);
   },
+  // Pause / reprise de la boutique (abonnement) : stock à 0 si la boutique est en pause, stock réel sinon.
+  // L'état est relu à l'exécution (une reprise rapide après une pause n'envoie jamais un 0 obsolète).
+  "tiktok_shop.stock_state": async (p, job) => {
+    const storeId = id(p.storeId) ?? job.storeId;
+    if (!storeId) return;
+    const integ = await db.integration.findUnique({ where: { storeId_kind: { storeId, kind: TIKTOK_SHOP_KIND } }, select: { status: true } });
+    if (integ?.status !== "active") return;
+    const { isStorePaused } = await import("@/lib/billing/pause");
+    await (await import("./sync")).syncStock(storeId, undefined, { zero: await isStorePaused(storeId) });
+  },
   "tiktok_shop.publish": async (p, job) => {
     const storeId = id(p.storeId) ?? job.storeId;
     const productId = id(p.productId);

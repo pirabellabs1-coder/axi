@@ -9,15 +9,20 @@ import { enqueue, queueNotification } from "@/lib/jobs";
 import { audit } from "@/lib/audit";
 import { CHANGE_REQUESTED_ACTION, DAY_MS, changeInvoiceIds, createAddOnOrder, getScheduledChange, hideProductsOverLimit, issuePlanInvoice, nonDebtInvoiceIds } from "./service";
 import { billingZone, graceEndsAt } from "./rules";
+import { migrateLegacyFreeSubscription, migrateLegacyFreeSubscriptions, reconcileStorePause, sendTrialReminderIfDue, syncCoveredSubscription, syncCoveredSubscriptions } from "./pause";
 
 /**
  * Cycle de vie de la facturation (à exécuter régulièrement) :
- *  1. fin d'essai → plan Gratuit (produits au-delà de la limite passés en brouillon) ;
+ *  0. abonnement Gratuit hérité → nouvel essai (migration idempotente, src/lib/billing/pause.ts) ;
+ *  1. rappels J-3 / J-1 avant la fin d'essai, puis fin d'essai sans plan payant → abonnement PAUSED et
+ *     boutique EN PAUSE (vitrine fermée, rien n'est supprimé, reprise automatique au paiement) ;
  *  2. lien de renouvellement : facture émise RENEWAL_LINK_DAYS_BEFORE (3) jours avant l'échéance et
  *     envoyée par e-mail (pas de prélèvement automatique en Mobile Money) ;
  *  3. changement programmé (descente / résiliation) appliqué à currentPeriodEnd ;
  *  4. impayés : PAST_DUE dès l'échéance dépassée, SUSPENDED après PAST_DUE_GRACE_DAYS (7) jours
- *     (données conservées, fonctions payantes coupées par effectivePlanId) ;
+ *     (boutique en pause, données conservées) ;
+ *  6. en fin de synchronisation : pause / reprise de la boutique alignée sur l'abonnement (reconcileStorePause),
+ *     puis recopie vers les boutiques supplémentaires couvertes par cet abonnement.
  *  5. options : expiration des options échues, facture de renouvellement des options mensuelles/annuelles.
  *
  * POINT D'INTÉGRATION : runBillingLifecycle() doit être appelée par le cron (ex. /api/jobs/run, toutes
@@ -47,6 +52,17 @@ export async function syncStoreBilling(storeId: string, now = new Date()): Promi
 }
 
 export async function syncSubscription(sub: Subscription, now = new Date()): Promise<void> {
+  // Boutique supplémentaire : aucun cycle propre, l'état suit l'abonnement de la boutique principale.
+  if (sub.coveredBySubscriptionId) return syncCoveredSubscription(sub, now);
+  if (await migrateLegacyFreeSubscription(sub, now)) return;
+  await syncSubscriptionSteps(sub, now);
+  await db.$transaction(async (tx) => {
+    await reconcileStorePause(tx, sub.storeId, now);
+    await syncCoveredSubscriptions(sub.id, tx, now);
+  });
+}
+
+async function syncSubscriptionSteps(sub: Subscription, now: Date): Promise<void> {
   const zone: PricingZone = billingZone(sub, sub.currency);
 
   // 0. Demandes de changement de plan non réglées à l'échéance : expirées (VOID). Le plan en cours
@@ -60,14 +76,18 @@ export async function syncSubscription(sub: Subscription, now = new Date()): Pro
     });
   }
 
-  // 1. Fin d'essai
+  // 1. Rappels J-3 / J-1, puis fin d'essai sans plan payant → pause (aucun produit masqué, rien n'est supprimé ;
+  //    trialEndsAt est conservé pour l'affichage « essai terminé le … »).
+  if (sub.status === "TRIALING" && sub.trialEndsAt && sub.trialEndsAt > now) {
+    await sendTrialReminderIfDue(sub, now);
+    return;
+  }
   if (sub.status === "TRIALING" && sub.trialEndsAt && sub.trialEndsAt <= now) {
     await db.$transaction(async (tx) => {
-      const locked = await tx.subscription.updateMany({ where: { id: sub.id, status: "TRIALING" }, data: { planId: "FREE", status: "ACTIVE", interval: "MONTHLY", trialEndsAt: null, currentPeriodStart: now, currentPeriodEnd: null, cancelAtPeriodEnd: false } });
+      const locked = await tx.subscription.updateMany({ where: { id: sub.id, status: "TRIALING" }, data: { planId: "FREE", status: "PAUSED", interval: "MONTHLY", pausedAt: now, currentPeriodStart: now, currentPeriodEnd: null, cancelAtPeriodEnd: false } });
       if (locked.count === 0) return;
-      await hideProductsOverLimit(sub.storeId, "FREE", tx);
-      await audit({ storeId: sub.storeId, action: "subscription.trial_ended", metadata: { from: sub.planId, to: "FREE" } }, tx);
-      await enqueue("subscription.changed", { storeId: sub.storeId, from: sub.planId, to: "FREE", reason: "trial_ended" }, { storeId: sub.storeId }, tx);
+      await audit({ storeId: sub.storeId, action: "subscription.trial_ended", metadata: { from: sub.planId, to: "PAUSED" } }, tx);
+      await enqueue("subscription.changed", { storeId: sub.storeId, from: sub.planId, to: "FREE", status: "PAUSED", reason: "trial_ended" }, { storeId: sub.storeId }, tx);
     });
     return;
   }
@@ -105,12 +125,13 @@ export async function syncSubscription(sub: Subscription, now = new Date()): Pro
       const locked = await tx.subscription.updateMany({ where: { id: sub.id, cancelAtPeriodEnd: true, currentPeriodEnd: end }, data: { cancelAtPeriodEnd: false } });
       if (locked.count === 0) return;
       if (scheduled.to === "FREE") {
-        await tx.subscription.update({ where: { id: sub.id }, data: { planId: "FREE", status: "ACTIVE", interval: "MONTHLY", currentPeriodStart: end, currentPeriodEnd: null } });
+        // Résiliation arrivée à échéance : plus de plan Gratuit, la boutique passe en pause (reconcileStorePause).
+        await tx.subscription.update({ where: { id: sub.id }, data: { planId: "FREE", status: "PAUSED", pausedAt: now, trialEndsAt: null, interval: "MONTHLY", currentPeriodStart: end, currentPeriodEnd: null } });
       } else {
         const inv = await planInvoiceForPeriod(sub, end, tx);
         const paid = inv?.status === "PAID";
         // Période prolongée UNIQUEMENT si la facture de renouvellement est payée. Sinon la période
-        // reste échue à `end` : la grâce court depuis l'échéance de la facture (dueAt = end), puis Gratuit.
+        // reste échue à `end` : la grâce court depuis l'échéance de la facture (dueAt = end), puis pause.
         await tx.subscription.update({
           where: { id: sub.id },
           data: paid
@@ -119,7 +140,7 @@ export async function syncSubscription(sub: Subscription, now = new Date()): Pro
         });
         if (!inv) await issuePlanInvoice(tx, { subscriptionId: sub.id, planId: scheduled.to, zone, interval: scheduled.interval, periodStart: end, dueAt: end });
       }
-      const hidden = await hideProductsOverLimit(sub.storeId, scheduled.to, tx);
+      const hidden = scheduled.to === "FREE" ? [] : await hideProductsOverLimit(sub.storeId, scheduled.to, tx);
       await audit({ storeId: sub.storeId, action: "subscription.downgrade_applied", metadata: { from: sub.planId, to: scheduled.to, interval: scheduled.interval, hiddenProducts: hidden.length } }, tx);
       await enqueue("subscription.changed", { storeId: sub.storeId, from: sub.planId, to: scheduled.to, reason: "scheduled" }, { storeId: sub.storeId }, tx);
     });
@@ -181,13 +202,40 @@ export async function syncAddOns(storeId: string, now = new Date()): Promise<voi
   }
 }
 
+/**
+ * Boutiques couvertes (option « Boutique en plus ») dont l'état diverge de l'abonnement principal, ou orphelines
+ * non encore en pause : seules celles-ci sont resynchronisées par le cron.
+ */
+export async function divergentCoveredSubscriptionIds(limit = 500): Promise<string[]> {
+  const rows = await db.$queryRaw<{ id: string }[]>`
+    SELECT c.id FROM "Subscription" c
+    LEFT JOIN "Subscription" p ON p.id = c."coveredBySubscriptionId"
+    WHERE c."coveredBySubscriptionId" IS NOT NULL
+      AND ((p.id IS NULL AND c.status <> 'PAUSED')
+        OR (p.id IS NOT NULL AND (c."planId", c.status, c."trialEndsAt", c."currentPeriodEnd") IS DISTINCT FROM (p."planId", p.status, p."trialEndsAt", p."currentPeriodEnd")))
+    LIMIT ${limit}`;
+  return rows.map((r) => r.id);
+}
+
 /** Point d'entrée du cron : toutes les boutiques concernées. */
-export async function runBillingLifecycle(now = new Date()): Promise<{ subscriptions: number; stores: number }> {
+export async function runBillingLifecycle(now = new Date()): Promise<{ subscriptions: number; stores: number; legacyFreeMigrated: number }> {
   const horizon = new Date(now.getTime() + RENEWAL_LINK_DAYS_BEFORE * DAY_MS);
+  // 0. Abonnements Gratuits hérités : nouvel essai (idempotent ; aussi lancé par `pnpm billing:migrate-free`).
+  const legacy = await migrateLegacyFreeSubscriptions(now).catch((e) => {
+    console.error("[billing] migrate free", e);
+    return { scanned: 0, migrated: 0 };
+  });
+  const divergentCovered = await divergentCoveredSubscriptionIds();
   const subs = await db.subscription.findMany({
     where: {
       OR: [
-        { status: "TRIALING", trialEndsAt: { lte: now } },
+        // Fin d'essai ET rappels J-3 / J-1 (horizon = 3 jours).
+        { status: "TRIALING", trialEndsAt: { lte: horizon } },
+        // Pause à appliquer (sans plan, impayé) ou à lever (plan de nouveau actif), boutiques couvertes.
+        { status: { in: ["PAUSED", "SUSPENDED", "CANCELLED"] }, store: { status: { in: ["DRAFT", "PUBLISHED", "CLOSED_TEMPORARILY"] } } },
+        { status: { in: ["ACTIVE", "TRIALING", "PAST_DUE"] }, store: { status: "PAUSED" } },
+        // Boutiques couvertes dont l'état diverge de l'abonnement principal (ou orphelines) uniquement.
+        ...(divergentCovered.length ? [{ id: { in: divergentCovered } }] : []),
         { planId: { not: "FREE" }, currentPeriodEnd: { lte: horizon } },
         { status: { in: ["ACTIVE", "PAST_DUE", "TRIALING"] }, invoices: { some: { status: "OPEN", dueAt: { lt: now } } } },
       ],
@@ -212,5 +260,5 @@ export async function runBillingLifecycle(now = new Date()): Promise<{ subscript
   // Phase D : fin d'essai des abonnements d'app (trialing → active), même cadence de cron.
   await (await import("@/lib/apps/billing-lifecycle")).runAppBillingLifecycle(now).catch((e) => console.error("[billing] apps", e));
   await (await import("@/lib/domains/lifecycle")).runDomainLifecycle(now).catch((e) => console.error("[billing] domains", e));
-  return { subscriptions: subs.length, stores: addonStores.length };
+  return { subscriptions: subs.length, stores: addonStores.length, legacyFreeMigrated: legacy.migrated };
 }

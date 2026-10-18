@@ -1,5 +1,6 @@
 "use server";
 
+import { shouldPauseStore } from "@/lib/billing/rules";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
@@ -134,7 +135,9 @@ export async function publishTheme(storeId: string, docJson: string, label?: str
     // Mise en ligne de la boutique (si encore en brouillon). Mêmes prérequis que `publishStore`.
     const s = ctx.store;
     const preOnline = s.status === "PUBLISHED" || s.status === "CLOSED_TEMPORARILY";
-    const preSuspended = s.status === "SUSPENDED";
+    // En pause (abonnement), ou sans plan ouvrant droit avant le passage du cron : jamais remise en ligne ici.
+    const prePaused = s.status === "PAUSED" || (s.status !== "PUBLISHED" && s.status !== "CLOSED_TEMPORARILY" && !!s.subscription && shouldPauseStore(s.subscription));
+    const preSuspended = s.status === "SUSPENDED" || prePaused;
     const [activeProducts, activePaymentMethods] = preOnline || preSuspended
       ? [1, 1] // non pertinent : la boutique est déjà en ligne ou suspendue.
       : await Promise.all([
@@ -142,7 +145,7 @@ export async function publishTheme(storeId: string, docJson: string, label?: str
           db.paymentMethod.count({ where: { storeId: s.id, active: true } }),
         ]);
     const { alreadyOnline, suspended, missing, bringOnline } = decideStoreGoOnline({
-      status: s.status,
+      status: prePaused ? "PAUSED" : s.status,
       hasWhatsapp: !!s.whatsappNumber,
       activeProducts,
       activePaymentMethods,
@@ -174,7 +177,7 @@ export async function publishTheme(storeId: string, docJson: string, label?: str
     if (bringOnline) revalidatePath("/marketplace");
 
     const store: PublishStoreOutcome = { online: alreadyOnline || bringOnline, justPublished: bringOnline, missing, suspended };
-    return success({ versions: await listThemeVersions(ctx.store.id), store }, publishThemeMessage({ bringOnline, suspended, missing }));
+    return success({ versions: await listThemeVersions(ctx.store.id), store }, publishThemeMessage({ bringOnline, suspended, missing, paused: prePaused }));
   });
 }
 

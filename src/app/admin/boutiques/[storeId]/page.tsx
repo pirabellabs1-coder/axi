@@ -165,7 +165,7 @@ export default async function AdminStoreDetail({ params }: { params: Promise<{ s
                 )}
               </>
             ) : (
-              <p className="text-sm text-ink-muted">Aucun abonnement (plan Gratuit implicite).</p>
+              <p className="text-sm text-ink-muted">Aucun abonnement (sans plan : la boutique est mise en pause par le cycle de facturation).</p>
             )}
           </CardBody>
         </Card>

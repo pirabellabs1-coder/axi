@@ -66,7 +66,9 @@ export type LazyJobType =
   | "tiktok_shop.sweep"
   | "tiktok_shop.sync"
   | "tiktok_shop.order"
-  | "tiktok_shop.publish";
+  | "tiktok_shop.publish"
+  // Boutique en pause / reprise : stock TikTok à 0 puis rétabli (jamais filtré par la pause)
+  | "tiktok_shop.stock_state";
 
 export async function enqueue(type: JobType, payload: Record<string, unknown>, opts: { storeId?: string | null; runAt?: Date } = {}, tx: Tx | typeof db = db) {
   return tx.job.create({
@@ -111,6 +113,7 @@ const LAZY_JOB_MODULES: Record<LazyJobType, () => Promise<{ handlers: JobHandler
   "tiktok_shop.sync": () => import("@/lib/tiktok-shop/jobs"),
   "tiktok_shop.order": () => import("@/lib/tiktok-shop/jobs"),
   "tiktok_shop.publish": () => import("@/lib/tiktok-shop/jobs"),
+  "tiktok_shop.stock_state": () => import("@/lib/tiktok-shop/jobs"),
 };
 
 /** Gestionnaire paresseux : un type déclaré sans implémentation échoue (retenté puis DEAD), jamais marqué DONE à tort. */
@@ -244,6 +247,7 @@ const handlers: Record<JobType, Handler> = {
   "tiktok_shop.sync": lazyHandler("tiktok_shop.sync"),
   "tiktok_shop.order": lazyHandler("tiktok_shop.order"),
   "tiktok_shop.publish": lazyHandler("tiktok_shop.publish"),
+  "tiktok_shop.stock_state": lazyHandler("tiktok_shop.stock_state"),
   "cart.check": async (p) => {
     const { checkAbandonedCart } = await import("@/lib/carts/service");
     await checkAbandonedCart(p);
@@ -318,6 +322,12 @@ export async function runJobs(limit = 25): Promise<{ processed: number; failed: 
     const locked = await db.job.updateMany({ where: { id: candidate.id, status: "PENDING" }, data: { status: "RUNNING", lockedAt: new Date(), attempts: { increment: 1 } } });
     if (locked.count === 0) continue;
     const handler = handlers[candidate.type as JobType];
+    // Boutique en pause (abonnement, src/lib/billing/pause.ts) : intégrations sortantes suspendues (campagnes,
+    // relances, synchros catalogue, TikTok Shop, push). Le job est clos sans effet (pas de rattrapage à la reprise).
+    if (await (await import("@/lib/billing/pause")).skipJobForPause(candidate)) {
+      await db.job.update({ where: { id: candidate.id }, data: { status: "DONE", lastError: "Ignoré : boutique en pause (abonnement)" } });
+      continue;
+    }
     try {
       if (!handler) throw new Error(`Handler inconnu : ${candidate.type}`);
       await handler((candidate.payload ?? {}) as Record<string, unknown>, { id: candidate.id, storeId: candidate.storeId });

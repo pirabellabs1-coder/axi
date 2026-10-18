@@ -39,5 +39,5 @@ export function canRestoreVersions(planId: PlanId): boolean {
   return PLANS[planId].features.advancedEditor;
 }
 
-export const PRESET_UPSELL = "Ce modèle n'est pas inclus dans le plan Gratuit (2 modèles de départ). Passez au plan Starter pour utiliser tous les modèles.";
+export const PRESET_UPSELL = "Ce modèle n'est pas inclus sans plan actif (2 modèles de départ). Choisissez un plan (Starter ou plus) pour utiliser tous les modèles.";
 export const VERSIONS_UPSELL = "L'historique des versions est inclus à partir du plan Business.";

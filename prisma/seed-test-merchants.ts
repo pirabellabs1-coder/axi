@@ -58,8 +58,6 @@ async function main() {
     const existing = await db.store.findUnique({ where: { slug }, select: { id: true } });
     if (existing) { results.push({ email: m.email, password, slug, storeId: existing.id, note: "boutique déjà existante — inchangée" }); continue; }
 
-    const owned = await db.membership.count({ where: { userId: user.id, role: "OWNER" } });
-    const isFirstStore = owned === 0;
     const c = getCountry(m.country);
     const zone = zoneForCurrency(c.currency);
     const billingCurrency = ZONE_CURRENCY[zone];
@@ -80,9 +78,8 @@ async function main() {
           contactEmail: user.email,
           onboardingStep: 1,
           subscription: {
-            create: isFirstStore
-              ? { planId: TRIAL_PLAN, status: "TRIALING", zone, currency: billingCurrency, trialEndsAt: addDays(now, TRIAL_DAYS), currentPeriodEnd: addDays(now, TRIAL_DAYS) }
-              : { planId: "FREE", status: "ACTIVE", zone, currency: billingCurrency },
+            // Plus de plan Gratuit : chaque boutique de test démarre par un essai (données de test indépendantes).
+            create: { planId: TRIAL_PLAN, status: "TRIALING", zone, currency: billingCurrency, trialEndsAt: addDays(now, TRIAL_DAYS), currentPeriodEnd: addDays(now, TRIAL_DAYS) },
           },
           memberships: { create: { userId: user.id, role: "OWNER" } },
           paymentMethods: {

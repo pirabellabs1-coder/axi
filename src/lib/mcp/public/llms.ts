@@ -102,7 +102,7 @@ export function buildPlatformLlmsTxt(): string {
     "",
     "## Liens",
     `- [Fonctionnalités](${base}/fonctionnalites): boutique en ligne, commande WhatsApp, Mobile Money, livraison`,
-    `- [Tarifs](${base}/tarifs): plans Gratuit, Starter, Business, Scale, Enterprise`,
+    `- [Tarifs](${base}/tarifs): plans Starter, Business, Scale, Enterprise (14 jours d'essai gratuit)`,
     `- [Marketplace](${base}/marketplace): boutiques publiées sur ${SITE.name}`,
     `- [Développeurs et IA](${base}/developpeurs): connecter une boutique à Claude, ChatGPT, Cursor (MCP, jetons API, OAuth)`,
     "",

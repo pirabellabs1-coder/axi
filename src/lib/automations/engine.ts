@@ -94,6 +94,7 @@ export async function planBlockReason(a: Pick<LoadedAutomation, "id" | "storeId"
   const store = await db.store.findUnique({ where: { id: a.storeId }, select: { status: true, subscription: true } });
   if (!store) return "Boutique introuvable";
   if (store.status === "SUSPENDED" || store.status === "ARCHIVED") return "Boutique suspendue";
+  if (store.status === "PAUSED") return "Boutique en pause (aucun plan actif)";
   const planId = effectivePlanId(store.subscription);
   if (!PLANS[planId].features.automations) return `Le plan ${PLANS[planId].name} n'inclut pas les automatisations`;
   if (!triggerAllowed(planId, a.trigger)) return "La relance des paniers abandonnés est incluse dans le plan Scale";

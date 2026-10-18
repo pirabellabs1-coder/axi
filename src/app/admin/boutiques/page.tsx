@@ -16,7 +16,7 @@ import { STORE_STATUS, SUB_STATUS, StatusBadge, Pagination, PAGE_SIZE, pageParam
 
 export const metadata: Metadata = { title: "Boutiques" };
 
-const STATUSES: StoreStatus[] = ["DRAFT", "PUBLISHED", "CLOSED_TEMPORARILY", "SUSPENDED", "ARCHIVED"];
+const STATUSES: StoreStatus[] = ["DRAFT", "PUBLISHED", "CLOSED_TEMPORARILY", "PAUSED", "SUSPENDED", "ARCHIVED"];
 
 export default async function AdminStores({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requirePlatformAdmin();

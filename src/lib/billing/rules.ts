@@ -8,7 +8,9 @@ import { periodEndFor } from "./proration";
  *  - montée en gamme : facture OPEN, l'ancien plan est conservé, le nouveau plan démarre à la
  *    confirmation du paiement (confirmInvoicePayment) ;
  *  - descente : en fin de période ;
- *  - impayé : grâce de PAST_DUE_GRACE_DAYS jours depuis `invoice.dueAt`, puis Gratuit ;
+ *  - impayé : grâce de PAST_DUE_GRACE_DAYS jours depuis `invoice.dueAt`, puis boutique en pause ;
+ *  - plus de plan Gratuit : sans plan ouvrant droit (fin d'essai, résiliation échue, impayé), la boutique
+ *    est EN PAUSE (shouldPauseStore) ; « FREE » n'est plus que le niveau interne « sans plan » ;
  *  - données jamais supprimées.
  */
 
@@ -38,6 +40,84 @@ export function effectivePlanId(sub: SubState | null, now = new Date()): PlanId 
     return sub.planId as PlanId;
   }
   return "FREE";
+}
+
+/* ───────────────────────── Pause (plus de plan Gratuit) ───────────────────────── */
+
+type PauseSub = SubState & { coveredBySubscriptionId?: string | null };
+
+/**
+ * Abonnement hérité de l'ancien plan Gratuit (ACTIVE + FREE, non couvert) : il reçoit un nouvel essai
+ * (migrateLegacyFreeSubscription) au lieu d'une mise en pause immédiate.
+ */
+export function isLegacyFreeSubscription(sub: Pick<PauseSub, "planId" | "status" | "coveredBySubscriptionId"> | null): boolean {
+  return !!sub && sub.planId === "FREE" && sub.status === "ACTIVE" && !sub.coveredBySubscriptionId;
+}
+
+/**
+ * La boutique doit-elle être EN PAUSE ? Oui dès qu'aucun plan n'ouvre droit : essai terminé sans plan payant,
+ * résiliation arrivée à échéance, impayé au-delà de la grâce, abonnement absent. Un abonnement Gratuit hérité
+ * n'est pas mis en pause (il est d'abord migré vers un essai).
+ */
+export function shouldPauseStore(sub: PauseSub | null, now = new Date()): boolean {
+  if (isLegacyFreeSubscription(sub)) return false;
+  return effectivePlanId(sub, now) === "FREE";
+}
+
+export type PauseReason = "trial_ended" | "cancelled" | "unpaid" | "no_plan";
+
+/** Motif lisible de la pause (bandeau marchand, e-mail). */
+export function pauseReasonOf(sub: Pick<SubState, "status" | "trialEndsAt"> | null): PauseReason {
+  if (!sub) return "no_plan";
+  if (sub.status === "SUSPENDED" || sub.status === "PAST_DUE") return "unpaid";
+  if (sub.trialEndsAt) return "trial_ended";
+  if (sub.status === "PAUSED") return "cancelled";
+  return "no_plan";
+}
+
+/** Rappels avant la fin de l'essai, en jours (J-3 puis J-1). */
+export const TRIAL_REMINDER_DAYS = [3, 1] as const;
+export type TrialReminderStage = (typeof TRIAL_REMINDER_DAYS)[number];
+
+/**
+ * Rappel de fin d'essai dû maintenant : le plus proche seuil atteint (un cron manqué à J-3 n'envoie que J-1).
+ * L'unicité est garantie par une clé (abonnement, date de fin d'essai, seuil), voir src/lib/billing/pause.ts.
+ */
+export function trialReminderStage(sub: Pick<SubState, "status" | "trialEndsAt"> | null, now = new Date()): TrialReminderStage | null {
+  if (!sub || !isTrialActive(sub, now)) return null;
+  const left = sub.trialEndsAt!.getTime() - now.getTime();
+  for (const d of [...TRIAL_REMINDER_DAYS].sort((a, b) => a - b)) if (left <= d * DAY_MS) return d;
+  return null;
+}
+
+/**
+ * Boutique supplémentaire (option EXTRA_STORE) : état recopié de l'abonnement de la boutique principale
+ * (plan, statut, période, essai, zone). Aucune facture propre : la place est payée par l'option.
+ */
+export function coverageMirror(parent: SubState & { interval: string; currentPeriodStart: Date; zone: string; currency: string; pausedAt: Date | null } | null, now = new Date()) {
+  if (!parent) return { planId: "FREE" as PlanId, status: "PAUSED" as const, trialEndsAt: null, currentPeriodEnd: null, pausedAt: now, cancelAtPeriodEnd: false };
+  return {
+    planId: parent.planId as PlanId,
+    status: parent.status as "TRIALING" | "ACTIVE" | "PAST_DUE" | "SUSPENDED" | "CANCELLED" | "PAUSED",
+    interval: parent.interval as Interval,
+    trialEndsAt: parent.trialEndsAt,
+    currentPeriodStart: parent.currentPeriodStart,
+    currentPeriodEnd: parent.currentPeriodEnd,
+    zone: parent.zone,
+    currency: parent.currency,
+    pausedAt: parent.pausedAt,
+    cancelAtPeriodEnd: false,
+  };
+}
+
+/**
+ * Abonnement qui couvrira une boutique secondaire (migration du Gratuit) : parmi les autres boutiques non archivées
+ * du propriétaire, celles dont l'abonnement ouvre droit (payé ou essai en cours) ; meilleur plan, puis la plus ancienne.
+ */
+export function pickCoveringSubscription<T extends SubState & { store: { createdAt: Date } }>(candidates: T[], now = new Date()): T | null {
+  const live = candidates.filter((c) => effectivePlanId(c, now) !== "FREE");
+  live.sort((a, b) => planRankOf(effectivePlanId(b, now)) - planRankOf(effectivePlanId(a, now)) || a.store.createdAt.getTime() - b.store.createdAt.getTime());
+  return live[0] ?? null;
 }
 
 /** Fin de la grâce d'une facture impayée : calculée depuis son échéance (`dueAt`). */
@@ -86,6 +166,7 @@ export type PlanPaymentDecision = {
   data: {
     status: "ACTIVE" | "PAST_DUE" | "SUSPENDED";
     trialEndsAt: null;
+    pausedAt?: null;
     planId?: PlanId;
     interval?: Interval;
     currentPeriodStart?: Date;
@@ -131,7 +212,7 @@ export function planPaymentDecision(params: {
       interval,
       future: false,
       appliedLower: false,
-      data: { status, trialEndsAt: null, planId: invoice.planId as PlanId, interval, currentPeriodStart: periodStart, currentPeriodEnd: periodEnd, cancelAtPeriodEnd: false },
+      data: { status, trialEndsAt: null, ...(status === "ACTIVE" ? { pausedAt: null } : {}), planId: invoice.planId as PlanId, interval, currentPeriodStart: periodStart, currentPeriodEnd: periodEnd, cancelAtPeriodEnd: false },
     };
   }
 
@@ -147,6 +228,7 @@ export function planPaymentDecision(params: {
     data: {
       status,
       trialEndsAt: null,
+      ...(status === "ACTIVE" ? { pausedAt: null } : {}),
       ...(appliedLower ? { cancelAtPeriodEnd: false } : {}),
       ...(!future && isLatest ? { planId: invoice.planId as PlanId, interval } : {}),
       ...(!future && extendsPeriod ? { currentPeriodEnd: invoice.periodEnd, currentPeriodStart: invoice.periodStart } : {}),

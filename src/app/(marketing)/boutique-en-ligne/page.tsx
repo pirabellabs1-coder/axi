@@ -52,7 +52,7 @@ const FAQ = [
   },
   {
     q: "Combien de produits puis-je publier ?",
-    a: `Le plan Gratuit va jusqu'à ${PLANS.FREE.limits.products} produits et ${PLANS.FREE.limits.ordersPerMonth} commandes par mois, Starter jusqu'à ${PLANS.STARTER.limits.products} produits sans limite de commandes, et les plans Business et au-delà n'ont pas de limite de produits.`,
+    a: `Le plan Starter va jusqu'à ${PLANS.STARTER.limits.products} produits sans limite de commandes, et les plans Business et au-delà n'ont pas de limite de produits. Pendant les ${TRIAL_DAYS} jours d'essai gratuit, vous profitez du plan Business.`,
   },
 ];
 

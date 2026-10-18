@@ -6,7 +6,7 @@ import { CtaBand } from "@/components/marketing/cta-band";
 import { Faq, FaqJsonLd } from "@/components/marketing/faq";
 import { BreadcrumbJsonLd } from "@/components/marketing/structured-data";
 import { ButtonLink } from "@/components/ui/button";
-import { MCP_TIER_LABEL, PLAN_ORDER, PLANS, REST_API_ACCESS } from "@/config/plans";
+import { MCP_TIER_LABEL, PUBLIC_PLANS, PLANS, REST_API_ACCESS } from "@/config/plans";
 import { SITE } from "@/config/site";
 import { SCOPES, SCOPE_LABELS } from "@/lib/mcp/scopes";
 import { MERCHANT_TOOL_REFERENCE, PUBLIC_TOOL_REFERENCE, type ToolGroup } from "@/lib/mcp/reference";
@@ -88,7 +88,7 @@ const FAQ = [
   },
   {
     q: "Quels plans donnent accès à l'API REST ?",
-    a: "Lecture seule (GET) à partir du plan Business, lecture et écriture à partir de Scale. Les webhooks sortants suivent la même logique : 2 points sur Business, 10 sur Scale, illimités sur Enterprise. Le connecteur MCP, lui, est inclus dans tous les plans, en lecture seule dès le plan Gratuit.",
+    a: "Lecture seule (GET) à partir du plan Business, lecture et écriture à partir de Scale. Les webhooks sortants suivent la même logique : 2 points sur Business, 10 sur Scale, illimités sur Enterprise. Le connecteur MCP, lui, est inclus dans tous les plans, essai compris.",
   },
   {
     q: "Comment vérifier la signature d'un webhook ?",
@@ -258,7 +258,7 @@ curl -s -X POST "$BASE/products" \\
               </tr>
             </thead>
             <tbody>
-              {PLAN_ORDER.map((p) => {
+              {PUBLIC_PLANS.map((p) => {
                 const access = REST_API_ACCESS[p];
                 const hooks = PLANS[p].limits.webhookEndpoints;
                 return (
@@ -455,7 +455,7 @@ GET  /s/{slug}/llms.txt`}</Code>
             <div className="rounded-[var(--radius-xl)] bg-surface p-6 ring-1 ring-line shadow-[var(--shadow-card)]">
               <h3 className="text-[15px] font-semibold text-ink">Connecteur IA inclus dans chaque plan</h3>
               <dl className="mt-3 divide-y divide-line text-sm">
-                {PLAN_ORDER.map((p) => (
+                {PUBLIC_PLANS.map((p) => (
                   <div key={p} className="flex items-baseline justify-between gap-4 py-2.5">
                     <dt className="font-medium text-ink">{PLANS[p].name}</dt>
                     <dd className="text-right text-ink-muted">{MCP_TIER_LABEL[p]}</dd>

@@ -129,22 +129,27 @@ enum StoreStatus {
   CLOSED_TEMPORARILY
   SUSPENDED
   ARCHIVED
+  /// Abonnement : aucun plan actif (fin d'essai sans plan payant, résiliation, impayé). Vitrine fermée,
+  /// espace marchand accessible ; statut précédent dans `statusBeforePause`, restauré au paiement.
+  PAUSED
 }
 
 model Store {
-  id           String      @id @default(cuid())
-  slug         String      @unique
-  name         String
-  tagline      String?
-  description  String?
-  category     String      @default("general") // general | food | fashion | beauty | electronics | home | services
-  country      String      @default("BJ")
-  city         String?
-  currency     String      @default("XOF")
-  timezone     String      @default("Africa/Porto-Novo")
-  locale       String      @default("fr")
-  status       StoreStatus @default(DRAFT)
-  statusReason String?
+  id                String       @id @default(cuid())
+  slug              String       @unique
+  name              String
+  tagline           String?
+  description       String?
+  category          String       @default("general") // general | food | fashion | beauty | electronics | home | services
+  country           String       @default("BJ")
+  city              String?
+  currency          String       @default("XOF")
+  timezone          String       @default("Africa/Porto-Novo")
+  locale            String       @default("fr")
+  status            StoreStatus  @default(DRAFT)
+  statusReason      String?
+  /// Statut avant la mise en pause pour abonnement (restauré automatiquement au paiement).
+  statusBeforePause StoreStatus?
 
   // Contact & WhatsApp
   whatsappNumber String? // E.164 sans '+', ex. 22997000000
@@ -1202,6 +1207,8 @@ enum SubscriptionStatus {
   PAST_DUE
   SUSPENDED
   CANCELLED
+  /// Aucun plan actif (fin d'essai sans plan payant, résiliation arrivée à échéance) : boutique en pause.
+  PAUSED
 }
 
 enum BillingInterval {
@@ -1210,24 +1217,31 @@ enum BillingInterval {
 }
 
 model Subscription {
-  id                     String             @id @default(cuid())
-  storeId                String             @unique
-  planId                 PlanId             @default(FREE)
-  zone                   String             @default("WORLD") // WORLD (EUR) | AFRICA (FCFA)
-  currency               String             @default("EUR")
-  status                 SubscriptionStatus @default(TRIALING)
-  interval               BillingInterval    @default(MONTHLY)
-  trialEndsAt            DateTime?
-  currentPeriodStart     DateTime           @default(now())
-  currentPeriodEnd       DateTime?
-  cancelAtPeriodEnd      Boolean            @default(false)
-  provider               String? // point d'intégration facturation plateforme
-  providerCustomerId     String?
-  providerSubscriptionId String?
-  createdAt              DateTime           @default(now())
-  updatedAt              DateTime           @updatedAt
-  store                  Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  invoices               Invoice[]
+  id                      String             @id @default(cuid())
+  storeId                 String             @unique
+  planId                  PlanId             @default(FREE)
+  zone                    String             @default("WORLD") // WORLD (EUR) | AFRICA (FCFA)
+  currency                String             @default("EUR")
+  status                  SubscriptionStatus @default(TRIALING)
+  interval                BillingInterval    @default(MONTHLY)
+  trialEndsAt             DateTime?
+  currentPeriodStart      DateTime           @default(now())
+  currentPeriodEnd        DateTime?
+  cancelAtPeriodEnd       Boolean            @default(false)
+  /// Début de la pause en cours (status PAUSED / SUSPENDED avec boutique fermée), null sinon.
+  pausedAt                DateTime?
+  /// Boutique supplémentaire (option EXTRA_STORE) : abonnement qui la couvre (boutique principale du compte).
+  /// L'état (plan, statut, période) est recopié depuis cet abonnement ; aucune facture propre.
+  coveredBySubscriptionId String?
+  provider                String? // point d'intégration facturation plateforme
+  providerCustomerId      String?
+  providerSubscriptionId  String?
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+  store                   Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  invoices                Invoice[]
+
+  @@index([coveredBySubscriptionId])
 }
 
 enum InvoiceStatus {

@@ -16,6 +16,7 @@ import { createCipheriv, createHash, createHmac, randomBytes } from "node:crypto
 import { unsplash, MEDIA, PRODUCT_PHOTOS } from "../src/config/media";
 import { PLANS, getAddOn, planPrice, zoneForCurrency, ZONE_CURRENCY, type AddOnId, type PlanId } from "../src/config/plans";
 import { seedLibrary } from "../src/lib/section-library/seed";
+import { BILLING_PAUSE_REASON } from "../src/lib/billing/pause-copy";
 
 type LoadEnvFile = (path?: string) => void;
 const loadEnv = (process as unknown as { loadEnvFile?: LoadEnvFile }).loadEnvFile;
@@ -129,7 +130,8 @@ type ProductSpec = {
 };
 type SubSpec = {
   plan: Exclude<PlanId, "ENTERPRISE">;
-  status: "TRIALING" | "ACTIVE" | "PAST_DUE";
+  /** PAUSED : essai terminé sans plan payant (plus de plan Gratuit) → boutique en pause, vitrine fermée. */
+  status: "TRIALING" | "ACTIVE" | "PAST_DUE" | "PAUSED";
   interval: "MONTHLY" | "YEARLY";
   /** Facture de renouvellement émise (à payer) en plus des factures réglées. */
   renewalOpen?: boolean;
@@ -635,7 +637,8 @@ const STORES: StoreSpec[] = [
       { name: "Bernadette Dansou", local: "0195445566", address: "Tokpota" },
       { name: "Didier Hounyè", local: "0161778899", address: "Avakpa" },
     ],
-    subscription: { plan: "FREE", status: "ACTIVE", interval: "MONTHLY" },
+    // Démo « boutique en pause » : essai de 14 jours terminé sans plan payant (vitrine « momentanément fermée »).
+    subscription: { plan: "FREE", status: "PAUSED", interval: "MONTHLY" },
     orderCount: 14,
     createdDaysAgo: 40,
     voice: { item: "rendez-vous", ask: "demain matin", delivery: "Le cabinet reçoit du lundi au samedi matin.", thanks: "Merci docteur pour votre écoute." },
@@ -865,7 +868,7 @@ async function seedStore(spec: StoreSpec, storeIndex: number, ctx: { ownerId: st
 
   const storeData = {
     name: spec.name, tagline: spec.tagline, description: spec.description, category: spec.category, sector: spec.sector, themeId: spec.sector,
-    country: spec.country, city: spec.city, currency: spec.currency, timezone: spec.timezone, status: "PUBLISHED" as const, statusReason: null, publishedAt,
+    country: spec.country, city: spec.city, currency: spec.currency, timezone: spec.timezone, ...(spec.subscription.status === "PAUSED" ? { status: "PAUSED" as const, statusBeforePause: "PUBLISHED" as const, statusReason: BILLING_PAUSE_REASON } : { status: "PUBLISHED" as const, statusBeforePause: null, statusReason: null }), publishedAt,
     whatsappNumber: spec.whatsappNumber, contactEmail: spec.contactEmail, contactPhone: spec.whatsappNumber, address: spec.address,
     openingHours: json(spec.openingHours), logoUrl: unsplash(spec.logo, 240, 240), bannerUrl: unsplash(spec.banner, 1600, 640),
     listedInMarketplace: true, isFeatured: !!spec.featured, onboardingStep: 6, onboardingCompleted: true,
@@ -1125,7 +1128,8 @@ async function seedStore(spec: StoreSpec, storeIndex: number, ctx: { ownerId: st
     periodStart = daysAgo(sub.trialStartedDaysAgo ?? 0, 9, 0);
     periodEnd = addDays(periodStart, 14);
   } else if (sub.plan === "FREE") {
-    periodStart = createdAt;
+    // En pause depuis la fin de l'essai (création + 14 jours).
+    periodStart = addDays(createdAt, 14);
     periodEnd = null;
   } else if (sub.status === "PAST_DUE") {
     periodStart = addMonths(daysAgo(4, 0, 0), -1);
@@ -1137,7 +1141,8 @@ async function seedStore(spec: StoreSpec, storeIndex: number, ctx: { ownerId: st
   }
   const subData = {
     planId: sub.plan as DbPlanId, zone, currency, status: sub.status, interval: sub.interval,
-    trialEndsAt: sub.status === "TRIALING" ? periodEnd : null, currentPeriodStart: periodStart, currentPeriodEnd: periodEnd, cancelAtPeriodEnd: false,
+    trialEndsAt: sub.status === "TRIALING" ? periodEnd : sub.status === "PAUSED" ? addDays(createdAt, 14) : null, currentPeriodStart: periodStart, currentPeriodEnd: periodEnd, cancelAtPeriodEnd: false,
+    pausedAt: sub.status === "PAUSED" ? addDays(createdAt, 14) : null,
     provider: sub.plan === "FREE" || sub.status === "TRIALING" ? null : "manual",
   };
   const subscription = await db.subscription.upsert({ where: { storeId }, create: { storeId, createdAt, ...subData }, update: subData });

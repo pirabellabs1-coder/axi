@@ -188,7 +188,7 @@ export function stockDiff(product: AxiProductForSync | null, link: ProductLink, 
 }
 
 /** Envoie les écarts de stock de tous les produits publiés de la boutique. */
-export async function syncStock(storeId: string, api?: TiktokShopApi): Promise<{ products: number; skus: number }> {
+export async function syncStock(storeId: string, api?: TiktokShopApi, opts: { zero?: boolean } = {}): Promise<{ products: number; skus: number }> {
   const ctx = await apiFor(storeId);
   const client = api ?? ctx.api;
   const config = ctx.config;
@@ -200,7 +200,9 @@ export async function syncStock(storeId: string, api?: TiktokShopApi): Promise<{
   let nS = 0;
   const pushed: Record<string, Record<string, number>> = {};
   for (const [productId, link] of links) {
-    const diff = stockDiff(products.find((p) => p.id === productId) ?? null, link, config.settings);
+    // `zero` : boutique en pause, toutes les annonces à 0 (plus de ventes TikTok) ; la reprise renvoie le stock réel
+    // car `pushedStock` retient 0.
+    const diff = stockDiff(opts.zero ? null : (products.find((p) => p.id === productId) ?? null), link, config.settings);
     if (!diff.length) continue;
     await client.updateInventory(link.tiktokProductId!, diff.map((d) => ({ id: d.skuId, warehouseId: config.warehouseId!, quantity: d.quantity })));
     pushed[productId] = Object.fromEntries(diff.map((d) => [d.key, d.quantity]));

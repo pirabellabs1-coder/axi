@@ -86,7 +86,7 @@ export function AppShell({
   store: { id: string; name: string; slug: string; status: string; logoUrl: string | null; onboardingCompleted: boolean };
   stores: { id: string; name: string; slug: string; logoUrl?: string | null }[];
   role: MembershipRole;
-  plan: { id: string; name: string; trialDaysLeft: number | null; pastDue?: boolean };
+  plan: { id: string; name: string; trialDaysLeft: number | null; pastDue?: boolean; paused?: boolean };
   counts?: { newOrders: number; unread: number; returns?: number };
   usage?: { orders: Usage; products: Usage };
   children: React.ReactNode;
@@ -526,15 +526,17 @@ function PlanCard({
   canBill,
 }: {
   base: string;
-  plan: { id: string; name: string; trialDaysLeft: number | null; pastDue?: boolean };
+  plan: { id: string; name: string; trialDaysLeft: number | null; pastDue?: boolean; paused?: boolean };
   usage?: { orders: Usage; products: Usage };
   canBill: boolean;
 }) {
   const content = (
     <>
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[13px] font-semibold text-ink">Plan {plan.name}</span>
-        {plan.pastDue ? (
+        <span className="text-[13px] font-semibold text-ink">{plan.id === "FREE" ? "Aucun plan actif" : `Plan ${plan.name}`}</span>
+        {plan.paused ? (
+          <Badge tone="warning">En pause</Badge>
+        ) : plan.pastDue ? (
           <Badge tone="danger">Impayé</Badge>
         ) : plan.trialDaysLeft != null ? (
           <Badge tone="sun">Essai, {plan.trialDaysLeft} j</Badge>

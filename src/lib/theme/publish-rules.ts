@@ -5,7 +5,7 @@
  */
 
 export type StorePublishInput = {
-  status: string; // StoreStatus : DRAFT | PUBLISHED | CLOSED_TEMPORARILY | SUSPENDED | ARCHIVED
+  status: string; // StoreStatus : DRAFT | PUBLISHED | CLOSED_TEMPORARILY | SUSPENDED | ARCHIVED | PAUSED
   hasWhatsapp: boolean;
   activeProducts: number;
   activePaymentMethods: number;
@@ -24,7 +24,9 @@ export type StorePublishDecision = {
 
 export function decideStoreGoOnline(input: StorePublishInput): StorePublishDecision {
   const alreadyOnline = input.status === "PUBLISHED" || input.status === "CLOSED_TEMPORARILY";
-  const suspended = input.status === "SUSPENDED";
+  // En pause (abonnement) : comme une suspension, jamais remise en ligne par la publication du thème
+  // (la pause n'est levée que par le paiement d'un plan, src/lib/billing/pause.ts).
+  const suspended = input.status === "SUSPENDED" || input.status === "PAUSED";
   const missing: string[] = [];
   if (!alreadyOnline && !suspended) {
     if (!input.hasWhatsapp) missing.push("un numéro WhatsApp");
@@ -36,8 +38,9 @@ export function decideStoreGoOnline(input: StorePublishInput): StorePublishDecis
 }
 
 /** Message de publication du thème selon l'issue de la mise en ligne. */
-export function publishThemeMessage(d: Pick<StorePublishDecision, "bringOnline" | "suspended" | "missing">): string {
+export function publishThemeMessage(d: Pick<StorePublishDecision, "bringOnline" | "suspended" | "missing"> & { paused?: boolean }): string {
   if (d.bringOnline) return "Thème publié — votre boutique est maintenant EN LIGNE.";
+  if (d.suspended && d.paused) return "Thème publié. Votre boutique est en pause : choisissez un plan pour la rouvrir.";
   if (d.suspended) return "Thème publié. Boutique suspendue par la plateforme : contactez le support pour la remettre en ligne.";
   if (d.missing.length) return `Thème publié. Pour mettre votre boutique en ligne, ajoutez ${d.missing.join(", ")}.`;
   return "Thème publié sur la boutique";

@@ -17,7 +17,7 @@ import { InvoiceActions, SubscriptionStatusSelect } from "./billing-actions";
 export const metadata: Metadata = { title: "Abonnements et factures" };
 
 const INVOICE_STATUSES: InvoiceStatus[] = ["OPEN", "PAID", "VOID", "UNCOLLECTIBLE", "DRAFT"];
-const SUB_STATUSES: SubscriptionStatus[] = ["TRIALING", "ACTIVE", "PAST_DUE", "SUSPENDED", "CANCELLED"];
+const SUB_STATUSES: SubscriptionStatus[] = ["TRIALING", "ACTIVE", "PAST_DUE", "SUSPENDED", "PAUSED", "CANCELLED"];
 
 export default async function AdminBilling({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requirePlatformAdmin();

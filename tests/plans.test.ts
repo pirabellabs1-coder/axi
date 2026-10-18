@@ -55,7 +55,8 @@ describe("planPrice", () => {
     expect(PLANS.ENTERPRISE.fromPrice).toBe(true);
     expect(planPrice("ENTERPRISE", "WORLD").amount).toBe(19900);
     expect(SELF_SERVE_PLANS).not.toContain("ENTERPRISE");
-    expect(SELF_SERVE_PLANS).toEqual(["FREE", "STARTER", "BUSINESS", "SCALE"]);
+    // Plus de plan Gratuit (18/10/2026) : jamais vendu.
+    expect(SELF_SERVE_PLANS).toEqual(["STARTER", "BUSINESS", "SCALE"]);
   });
 });
 
@@ -155,9 +156,9 @@ describe("ADD_ONS", () => {
     }
   });
 
-  it("éligibilité : pas de pack WhatsApp ni de membre en plus sur Gratuit ou Starter", () => {
+  it("éligibilité : aucune option sans plan actif, pas de pack WhatsApp ni de membre en plus sur Starter", () => {
     const eligible = (plan: PlanId) => ADD_ONS.filter((a) => a.plans.includes(plan)).map((a) => a.id);
-    expect(eligible("FREE")).toEqual(["SECTOR_TEMPLATE", "DONE_FOR_YOU"]);
+    expect(eligible("FREE")).toEqual([]);
     expect(eligible("STARTER")).not.toContain("PACK_WA_UTILITY_500");
     expect(eligible("STARTER")).not.toContain("EXTRA_MEMBER");
     expect(eligible("BUSINESS")).toEqual(expect.arrayContaining(["EXTRA_MEMBER", "PACK_WA_MARKETING_200", "PACK_AI_1000"]));
@@ -177,12 +178,13 @@ describe("ADD_ONS", () => {
   });
 });
 
-describe("lot 1 bis : plan Gratuit élargi", () => {
-  it("50 commandes par mois et 100 produits, sans dépasser le Starter", () => {
+describe("niveau interne « sans plan » (ex-Gratuit)", () => {
+  it("limites de base conservées, sous le Starter, et jamais vendu", () => {
     expect(PLANS.FREE.limits.ordersPerMonth).toBe(50);
     expect(PLANS.FREE.limits.products).toBe(100);
     expect(PLANS.FREE.limits.products!).toBeLessThan(PLANS.STARTER.limits.products!);
-    expect(PLANS.FREE.bullets[0]).toBe("100 produits, 50 commandes par mois");
+    expect(PLANS.FREE.sellable).toBe(false);
+    expect(PLANS.FREE.name).not.toMatch(/gratuit/i);
   });
 
   it("aucun prix n'a changé", () => {

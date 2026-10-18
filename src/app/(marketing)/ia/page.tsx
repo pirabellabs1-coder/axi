@@ -10,7 +10,7 @@ import { Faq, FaqJsonLd } from "@/components/marketing/faq";
 import { BreadcrumbJsonLd } from "@/components/marketing/structured-data";
 import { getDomain, groupsForDomain, SHOTS } from "@/lib/marketing/positioning";
 import { MERCHANT_TOOL_REFERENCE, PUBLIC_TOOL_REFERENCE } from "@/lib/mcp/reference";
-import { MCP_TIER_LABEL, PLANS, PLAN_ORDER, TRIAL_DAYS } from "@/config/plans";
+import { MCP_TIER_LABEL, PLANS, PUBLIC_PLANS, TRIAL_DAYS } from "@/config/plans";
 import { MEDIA, unsplash } from "@/config/media";
 
 const DOMAIN = getDomain("ia");
@@ -55,7 +55,7 @@ const FAQ = [
   },
   {
     q: "Qu'est-ce qui est inclus dans mon plan ?",
-    a: `Le connecteur est inclus partout : ${MCP_TIER_LABEL.FREE.toLowerCase()} sur le plan Gratuit, ${MCP_TIER_LABEL.STARTER.toLowerCase()} sur Starter, puis l'accès complet et la connexion en un clic dès Business. L'abonnement à Claude ou ChatGPT reste le vôtre.`,
+    a: `Le connecteur est inclus dans tous les plans : ${MCP_TIER_LABEL.STARTER.toLowerCase()} sur Starter, puis l'accès complet et la connexion en un clic dès Business. L'abonnement à Claude ou ChatGPT reste le vôtre.`,
   },
 ];
 
@@ -174,9 +174,9 @@ export default function AiPage() {
       {/* Inclus par plan */}
       <Section labelledBy="ia-plans-title" tone="deep">
         <SectionHeading id="ia-plans-title" title="Inclus dans chaque plan." description="Le connecteur n'est pas une option à acheter : seul son niveau d'accès change." />
-        <ul className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          {PLAN_ORDER.map((p, i) => (
-            <li key={p} className="reveal rounded-[var(--radius-xl)] bg-surface p-6 ring-1 ring-line" style={{ transitionDelay: `${(i % 5) * 60}ms` }}>
+        <ul className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {PUBLIC_PLANS.map((p, i) => (
+            <li key={p} className="reveal rounded-[var(--radius-xl)] bg-surface p-6 ring-1 ring-line" style={{ transitionDelay: `${(i % 4) * 60}ms` }}>
               <p className="text-[16px] font-semibold text-ink">{PLANS[p].name}</p>
               <p className="mt-2 text-[14.5px] leading-relaxed text-ink-muted">{MCP_TIER_LABEL[p]}</p>
             </li>

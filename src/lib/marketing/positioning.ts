@@ -215,7 +215,7 @@ export const CAPABILITY_GROUPS: CapabilityGroup[] = [
     title: "Intelligence artificielle",
     description: "Une IA qui travaille sur vos vraies données, avec des autorisations que vous choisissez.",
     items: [
-      { title: "Connecteur IA (MCP)", text: "Claude, ChatGPT, Cursor ou vos propres agents lisent et gèrent votre boutique. Lecture seule dès le plan Gratuit.", plan: "FREE" },
+      { title: "Connecteur IA (MCP)", text: "Claude, ChatGPT, Cursor ou vos propres agents lisent et gèrent votre boutique. Inclus dans tous les plans, essai compris.", plan: "FREE" },
       { title: "Vitrine lisible par les IA", text: "Les assistants de vos acheteurs trouvent vos produits et préparent un panier que l'acheteur valide lui-même.", plan: "FREE" },
       { title: "Connexion en un clic (OAuth)", text: "Reliez Claude.ai ou ChatGPT à votre boutique sans manipuler de jeton.", plan: "BUSINESS" },
       { title: "Assistant de rédaction", text: "Fiches produits, descriptions de collections et réponses clients proposées en brouillon.", plan: "BUSINESS" },

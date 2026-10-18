@@ -21,7 +21,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       <p className="mt-8 text-center text-sm text-ink-muted">
         Pas encore de compte ?{" "}
         <Link href={`/inscription${next ? `?next=${encodeURIComponent(next)}` : ""}`} className="inline-flex min-h-11 items-center font-medium text-primary underline-offset-4 hover:underline">
-          Créer ma boutique gratuitement
+          Créer ma boutique (14 jours d&apos;essai gratuit)
         </Link>
       </p>
     </div>

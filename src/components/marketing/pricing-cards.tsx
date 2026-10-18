@@ -8,13 +8,13 @@ import { cn } from "@/lib/utils";
 import { usePricing } from "@/components/marketing/pricing-context";
 
 /**
- * Cartes des 4 plans en libre-service (Gratuit, Starter, Business, Scale).
+ * Cartes des 3 plans en libre-service (Starter, Business, Scale). Plus de plan Gratuit : essai de TRIAL_DAYS jours.
  * Doit être rendu dans un <PricingProvider>. Business est mis en avant (double-bezel).
  */
 export function PricingCards({ compact = false, className }: { compact?: boolean; className?: string }) {
   const plans = SELF_SERVE_PLANS.map((id) => PLANS[id]);
   return (
-    <ul className={cn("grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-4", className)}>
+    <ul className={cn("grid grid-cols-1 items-stretch gap-4 md:grid-cols-3", className)}>
       {plans.map((plan, i) => (
         <li key={plan.id} className="reveal" style={{ transitionDelay: `${i * 70}ms` }}>
           <PlanCard plan={plan} compact={compact} />
@@ -29,10 +29,10 @@ function PlanCard({ plan, compact }: { plan: Plan; compact: boolean }) {
   const effective = prices?.[plan.id];
   const price = displayPlanPrice(plan.id, zone, interval, effective ? effective[zone] : undefined);
   const highlight = !!plan.highlight;
-  const free = price.kind === "free";
   const bullets = compact ? plan.bullets.slice(0, 4) : plan.bullets;
   const trial = plan.id === TRIAL_PLAN;
-  const cta = free ? "Commencer gratuitement" : trial ? `Essayer ${TRIAL_DAYS} jours` : `Choisir ${plan.name}`;
+  // Tous les plans démarrent par l'essai gratuit, sans carte bancaire.
+  const cta = trial ? `Essayer ${TRIAL_DAYS} jours gratuitement` : `Choisir ${plan.name}`;
 
   const body = (
     <div className="flex h-full flex-col p-6 sm:p-7">
@@ -50,11 +50,12 @@ function PlanCard({ plan, compact }: { plan: Plan; compact: boolean }) {
               <span className="text-sm text-ink-muted">/ mois</span>
             </p>
             <p className="mt-2.5 text-[13px] text-ink-muted">{price.billed ?? "Facturé chaque mois, sans engagement"}</p>
+            <p className="mt-1 text-[13px] text-ink-muted">{TRIAL_DAYS} jours d&apos;essai gratuit, sans carte bancaire</p>
           </>
         ) : (
           <>
             <p className="text-[2.5rem] font-semibold leading-none tracking-[-0.045em] text-ink tabular">{price.label}</p>
-            <p className="mt-2.5 text-[13px] text-ink-muted">{free ? "Pour toujours, sans carte bancaire" : "Selon vos besoins"}</p>
+            <p className="mt-2.5 text-[13px] text-ink-muted">Selon vos besoins</p>
           </>
         )}
       </div>

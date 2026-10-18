@@ -42,7 +42,7 @@ export function AccountsForm({ storeId, initial, whatsappActive, welcomeMax, pai
                   )}
                   {c.value === "platform" && !paidPlan && (
                     <span className="mt-1.5 block text-[13px] text-ink-muted">
-                      Plan Gratuit : {freeDailyQuota} codes par jour.{" "}
+                      Sans plan actif : {freeDailyQuota} codes par jour.{" "}
                       <a href={`/app/${storeId}/abonnement`} className="font-semibold text-primary underline underline-offset-4">
                         Voir les plans
                       </a>

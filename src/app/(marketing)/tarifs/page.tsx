@@ -8,7 +8,7 @@ import { PricingComparison } from "@/components/marketing/pricing-comparison";
 import { PricingAddOns } from "@/components/marketing/pricing-addons";
 import { Faq, FaqJsonLd } from "@/components/marketing/faq";
 import { CtaBand } from "@/components/marketing/cta-band";
-import { PLANS, PLAN_ORDER, TRIAL_DAYS, PAST_DUE_GRACE_DAYS, YEARLY_MONTHS_PAID } from "@/config/plans";
+import { PLANS, PUBLIC_PLANS, TRIAL_DAYS, PAST_DUE_GRACE_DAYS, YEARLY_MONTHS_PAID } from "@/config/plans";
 import { effectiveFromRows, loadActiveOverrides } from "@/lib/pricing/catalog";
 import { formatPrice } from "@/lib/marketing/pricing";
 import { ogImage } from "@/lib/marketing/seo";
@@ -20,7 +20,7 @@ const ENTERPRISE_XOF = formatPrice(PLANS.ENTERPRISE.price.AFRICA ?? 0, "XOF");
 
 export const metadata: Metadata = {
   title: "Tarifs",
-  description: `Gratuit pour commencer, Business à ${BUSINESS_EUR} ou ${BUSINESS_XOF} par mois. ${TRIAL_DAYS} jours d'essai, ${12 - YEARLY_MONTHS_PAID} mois offerts en annuel, 0 % de commission sur vos ventes. Deux grilles : euros pour le monde, FCFA pour l'Afrique francophone.`,
+  description: `${TRIAL_DAYS} jours d'essai gratuit, sans carte bancaire. Business à ${BUSINESS_EUR} ou ${BUSINESS_XOF} par mois, ${12 - YEARLY_MONTHS_PAID} mois offerts en annuel, 0 % de commission sur vos ventes. Deux grilles : euros pour le monde, FCFA pour l'Afrique francophone.`,
   alternates: { canonical: "/tarifs" },
   openGraph: {
     title: "Tarifs | Axi",
@@ -32,8 +32,8 @@ export const metadata: Metadata = {
 
 const RULES: { icon: LucideIcon; title: string; text: string }[] = [
   { icon: BadgePercent, title: "0 % de commission", text: "Sur tous les plans. Vos clients vous paient directement, Axi ne touche pas à vos ventes." },
-  { icon: Timer, title: `${TRIAL_DAYS} jours de Business offerts`, text: "À l'inscription, sans carte bancaire. Vous choisissez votre plan quand vous voulez." },
-  { icon: ShieldCheck, title: "Retour au Gratuit sans perte", text: "À la fin de l'essai ou d'un abonnement, vos produits, clients et commandes restent là." },
+  { icon: Timer, title: `${TRIAL_DAYS} jours d'essai gratuit`, text: "Toutes les fonctions Business à l'inscription, sans carte bancaire. Vous choisissez votre plan quand vous voulez." },
+  { icon: ShieldCheck, title: "Rien n'est jamais supprimé", text: "Sans plan à la fin de l'essai, la boutique est mise en pause : produits, clients et commandes restent là, et elle rouvre dès le paiement." },
   { icon: ArrowDownUp, title: "Montée immédiate, au prorata", text: "Un plan supérieur s'active tout de suite. Vous ne payez que la différence sur la période en cours." },
   { icon: CalendarClock, title: "Descente en fin de période", text: "Un plan inférieur prend effet à la fin de la période déjà payée. Pas de remboursement partiel." },
   { icon: RotateCcw, title: `${PAST_DUE_GRACE_DAYS} jours de grâce`, text: `Si un paiement échoue, vous gardez toutes vos fonctions pendant ${PAST_DUE_GRACE_DAYS} jours, le temps de régulariser.` },
@@ -46,7 +46,7 @@ const FAQ = [
   },
   {
     q: "Qu'est-ce qui est vraiment inclus dans tous les plans ?",
-    a: "La boutique en ligne et son éditeur à sections, le catalogue à variantes et collections, les comptes acheteurs, la commande par lien WhatsApp, le paiement à la livraison, la marketplace Axi, le connecteur IA en lecture et la vitrine lisible par les assistants. Les plans payants ouvrent les volumes, l'encaissement en ligne, l'équipe, l'international et l'automatisation.",
+    a: "La boutique en ligne et son éditeur à sections, le catalogue à variantes et collections, les comptes acheteurs, la commande par lien WhatsApp, le paiement à la livraison, la marketplace Axi, le connecteur IA et la vitrine lisible par les assistants. Les plans supérieurs ouvrent les volumes, l'encaissement en ligne, l'équipe, l'international et l'automatisation.",
   },
   {
     q: "Pourquoi deux grilles, en euros et en FCFA ?",
@@ -54,11 +54,11 @@ const FAQ = [
   },
   {
     q: "Comment fonctionne l'essai ?",
-    a: `Votre boutique démarre avec toutes les fonctions du plan Business pendant ${TRIAL_DAYS} jours, sans carte bancaire ni engagement. Vous pouvez souscrire à tout moment. Sinon, la boutique revient simplement au plan Gratuit.`,
+    a: `Votre boutique démarre avec toutes les fonctions du plan Business pendant ${TRIAL_DAYS} jours, sans carte bancaire ni engagement. Vous êtes prévenu par e-mail 3 jours puis 1 jour avant la fin, et vous pouvez souscrire à tout moment.`,
   },
   {
-    q: "Que se passe-t-il si je dépasse les limites du Gratuit ?",
-    a: `Vos produits et commandes existants restent visibles. Vous ne pouvez simplement plus en ajouter au-delà de ${PLANS.FREE.limits.products} produits ou ${PLANS.FREE.limits.ordersPerMonth} commandes dans le mois, jusqu'au mois suivant ou à un changement de plan.`,
+    q: "Et si je ne choisis pas de plan à la fin de l'essai ?",
+    a: "Votre boutique est mise en pause : vos clients voient « Boutique momentanément fermée » et ne peuvent plus commander. Votre espace reste accessible et rien n'est supprimé. Dès que vous choisissez un plan et que le paiement est confirmé, la boutique rouvre automatiquement.",
   },
   {
     q: "Comment payer mon abonnement ?",
@@ -81,7 +81,7 @@ async function effectivePrices(): Promise<EffectiveMonthly | undefined> {
   try {
     const rows = await loadActiveOverrides();
     return Object.fromEntries(
-      PLAN_ORDER.map((id) => [id, { WORLD: effectiveFromRows(rows, "plan", id, "WORLD").amount, AFRICA: effectiveFromRows(rows, "plan", id, "AFRICA").amount }]),
+      PUBLIC_PLANS.map((id) => [id, { WORLD: effectiveFromRows(rows, "plan", id, "WORLD").amount, AFRICA: effectiveFromRows(rows, "plan", id, "AFRICA").amount }]),
     ) as EffectiveMonthly;
   } catch {
     return undefined; // base indisponible (build hors ligne) : prix du catalogue
@@ -101,7 +101,7 @@ export default async function PricingPage() {
                 Un prix fixe par mois. <span className="text-ink-muted">Zéro commission.</span>
               </h1>
               <p className="mt-5 max-w-[52ch] text-lg leading-relaxed text-ink-muted animate-fade-up [animation-delay:120ms]">
-                Toute la plateforme pour un seul abonnement, de la boutique aux paiements, de WhatsApp au connecteur IA. Commencez gratuitement, essayez Business {TRIAL_DAYS} jours.
+                Toute la plateforme pour un seul abonnement, de la boutique aux paiements, de WhatsApp au connecteur IA. {TRIAL_DAYS} jours d&apos;essai gratuit, sans carte bancaire.
               </p>
             </div>
             <div className="flex flex-col items-start gap-3 animate-fade-up [animation-delay:180ms] lg:items-end">

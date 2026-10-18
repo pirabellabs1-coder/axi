@@ -65,8 +65,8 @@ async function purchaseAddOnFor(storeId: string, addOnId: string, quantity: numb
   const invoiceId = await db.$transaction(async (tx) => {
     const sub = await tx.subscription.upsert({
       where: { storeId: ctx.store.id },
-      // Jamais de plan payant créé ici : un abonnement absent démarre sur Gratuit.
-      create: { storeId: ctx.store.id, planId: "FREE", status: "ACTIVE", zone: initialZone, currency: ZONE_CURRENCY[initialZone] },
+      // Jamais de plan payant créé ici : un abonnement absent est « sans plan » (boutique en pause).
+      create: { storeId: ctx.store.id, planId: "FREE", status: "PAUSED", pausedAt: new Date(), zone: initialZone, currency: ZONE_CURRENCY[initialZone] },
       update: {},
     });
     const zone = billingZone(sub, ctx.store.currency);

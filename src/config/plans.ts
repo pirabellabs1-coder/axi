@@ -7,6 +7,11 @@
  * La zone est déduite du pays de la boutique (devise XOF / XAF → AFRICA).
  * Paiement annuel : 10 mois payés pour 12 (2 mois offerts).
  * 0 % de commission sur les ventes, sur tous les plans.
+ *
+ * Plus de plan Gratuit (décision du 18/10/2026) : toute boutique démarre par TRIAL_DAYS jours d'essai
+ * TRIAL_PLAN sans carte, puis passe EN PAUSE sans plan payant (src/lib/billing/pause.ts). La valeur
+ * `FREE` reste dans PlanId pour la compatibilité des données : c'est le niveau interne « sans plan »
+ * (boutique en pause, fonctions de base de l'espace marchand), JAMAIS vendu ni affiché comme une offre.
  */
 export type PlanId = "FREE" | "STARTER" | "BUSINESS" | "SCALE" | "ENTERPRISE";
 export type PricingZone = "WORLD" | "AFRICA";
@@ -195,6 +200,8 @@ export type Plan = {
   /** Enterprise : prix « à partir de ». */
   fromPrice?: boolean;
   highlight?: boolean;
+  /** false = jamais proposé à la vente (niveau interne FREE). Absent = vendable. */
+  sellable?: boolean;
   support: string;
   limits: PlanLimits;
   features: PlanFeatures;
@@ -260,13 +267,15 @@ const SCALE_F: PlanFeatures = {
 const ENTERPRISE_F: PlanFeatures = { ...SCALE_F, resellers: true, sla: true };
 
 export const PLANS: Record<PlanId, Plan> = {
+  // Niveau interne « sans plan » (boutique en pause) : non vendable, absent de PUBLIC_PLANS et SELF_SERVE_PLANS.
   FREE: {
     id: "FREE",
-    name: "Gratuit",
-    audience: "Tester la plateforme",
-    tagline: "Ouvrez votre boutique et prenez vos premières commandes.",
+    name: "Sans plan",
+    audience: "Boutique en pause",
+    tagline: "Aucun plan actif : choisissez un plan pour rouvrir votre boutique.",
     price: { WORLD: 0, AFRICA: 0 },
     support: "Centre d'aide",
+    sellable: false,
     // Lot 1 bis (analyse concurrentielle §8.1) : 100 produits et 50 commandes par mois (niveau de Take App Basic),
     // en restant sous le Starter (200 produits) pour garder une montée en gamme lisible.
     limits: {
@@ -276,7 +285,7 @@ export const PLANS: Record<PlanId, Plan> = {
       locations: 1, posDevices: 0,
     },
     features: NONE,
-    bullets: ["100 produits, 50 commandes par mois", "Commande par lien WhatsApp", "Paiement à la livraison ou manuel", "Retrait et 1 zone de livraison", "2 thèmes, logo Axi visible"],
+    bullets: ["Boutique en pause : vitrine fermée", "Données conservées", "Choisissez un plan pour rouvrir"],
   },
   STARTER: {
     id: "STARTER",
@@ -347,7 +356,16 @@ export const PLANS: Record<PlanId, Plan> = {
   },
 };
 
+/** Ordre de rang INTERNE (comparaisons de niveau) : FREE = « sans plan », toujours le plus bas. */
 export const PLAN_ORDER: PlanId[] = ["FREE", "STARTER", "BUSINESS", "SCALE", "ENTERPRISE"];
+
+/** Plans proposés (site public, comparatif, choix de plan) : le niveau interne FREE n'en fait jamais partie. */
+export const PUBLIC_PLANS: PlanId[] = PLAN_ORDER.filter((p) => PLANS[p].sellable !== false);
+
+/** Le plan peut-il être souscrit (contrôle serveur, pas seulement UI) ? */
+export function isSellablePlan(id: string): id is PlanId {
+  return (PUBLIC_PLANS as string[]).includes(id);
+}
 
 /* ───────────────────────── Niveaux (lots 2 et 4) ───────────────────────── */
 
@@ -363,7 +381,7 @@ export const AUDIENCE_RULES_BY_PLAN: Record<PlanId, AudienceRuleType[]> = { FREE
 /** Générations de boutique par l'IA offertes une seule fois par boutique (lot 4 §9), avant tout débit de crédits. */
 export const AI_STORE_BUILDER_FREE_GENERATIONS = 1;
 /** Plans vendus en libre-service (Enterprise passe par un devis). */
-export const SELF_SERVE_PLANS: PlanId[] = ["FREE", "STARTER", "BUSINESS", "SCALE"];
+export const SELF_SERVE_PLANS: PlanId[] = ["STARTER", "BUSINESS", "SCALE"];
 
 export function getPlan(id: PlanId): Plan {
   return PLANS[id] ?? PLANS.FREE;
@@ -456,7 +474,8 @@ export const CREDIT_LABELS: Record<CreditType, string> = {
 };
 
 const PAID: PlanId[] = ["STARTER", "BUSINESS", "SCALE", "ENTERPRISE"];
-const ALL: PlanId[] = ["FREE", ...PAID];
+// Plus d'option pour une boutique sans plan (en pause) : elle choisit d'abord un plan.
+const ALL: PlanId[] = PAID;
 
 export const ADD_ONS: AddOn[] = [
   { id: "EXTRA_MEMBER", name: "Membre d'équipe en plus", description: "Ajoutez un employé au-delà de la limite de votre plan.", price: { WORLD: 500, AFRICA: 2000 }, billing: "MONTHLY", plans: ["BUSINESS", "SCALE"] },

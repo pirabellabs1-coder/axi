@@ -7,11 +7,10 @@ import { db, type Tx } from "@/lib/db";
 import { requireStore, type StoreContext } from "@/lib/auth/permissions";
 import { guard, fail, success, type ActionResult } from "@/lib/action";
 import { PLANS, ZONE_CURRENCY, zoneForCurrency, type Interval, type PlanId } from "@/config/plans";
-import { enqueue } from "@/lib/jobs";
 import { audit } from "@/lib/audit";
 import { SITE } from "@/config/site";
 import { createPlatformCheckout, fetchPlatformStatus, platformProviderFor } from "./platform-billing";
-import { CHANGE_REQUESTED_ACTION, addOnInvoiceIds, confirmInvoicePayment, nonDebtInvoiceIds, hideProductsOverLimit, invoiceLines, issuePlanInvoice, pendingPlanChange, quotePlanChange } from "./service";
+import { CHANGE_REQUESTED_ACTION, addOnInvoiceIds, confirmInvoicePayment, hasRunningPaidPeriod, nonDebtInvoiceIds, invoiceLines, issuePlanInvoice, pendingPlanChange, quotePlanChange } from "./service";
 import { billingZone } from "./rules";
 import { COUPON_PUBLIC_ERROR, precheckStoreCoupon, redeemCoupon } from "@/lib/pricing/coupons";
 import { normalizeCouponCode } from "@/lib/pricing/rules";
@@ -19,7 +18,10 @@ import { normalizeCouponCode } from "@/lib/pricing/rules";
 /** Échec d'utilisation d'un code promo dans la transaction d'émission (annule la transaction). */
 class CouponError extends Error {}
 
-const zPlan = z.enum(["FREE", "STARTER", "BUSINESS", "SCALE", "ENTERPRISE"]);
+// Plus de plan Gratuit : seuls les plans vendables sont acceptés (contrôle serveur).
+const zPlan = z.enum(["STARTER", "BUSINESS", "SCALE", "ENTERPRISE"]);
+const NO_FREE_PLAN = "Le plan Gratuit n'existe plus : choisissez un plan payant (essai de 14 jours offert à la création de la boutique).";
+const COVERED_MESSAGE = "L'abonnement de cette boutique est porté par la boutique principale de votre compte (option « Boutique en plus ») : changez de plan depuis celle-ci.";
 const zInterval = z.enum(["MONTHLY", "YEARLY"]);
 
 /**
@@ -51,10 +53,12 @@ async function voidReplacedPlanInvoices(tx: Tx, subscriptionId: string, fromDate
  */
 export async function changePlan(storeId: string, planId: PlanId, interval: Interval, couponCode?: string | null): Promise<ActionResult> {
   return guard(async () => {
+    if (planId === "FREE") return fail(NO_FREE_PLAN);
     const parsed = z.object({ planId: zPlan, interval: zInterval, couponCode: z.string().max(40).optional().nullable() }).safeParse({ planId, interval, couponCode });
     if (!parsed.success) return fail("Plan, période ou code promo invalide.");
     const code = normalizeCouponCode(parsed.data.couponCode);
     const ctx = await requireStore(storeId, "billing.manage");
+    if (ctx.store.subscription?.coveredBySubscriptionId) return fail(COVERED_MESSAGE);
     if (planId === "ENTERPRISE") return fail(`Enterprise est sur devis : écrivez-nous à ${SITE.supportEmail}.`);
     const sub = ctx.store.subscription;
     const { zone, currency } = zoneOf(ctx);
@@ -69,7 +73,7 @@ export async function changePlan(storeId: string, planId: PlanId, interval: Inte
 
     // Code promo SaaS : uniquement à la souscription ou à la montée en gamme (facture émise maintenant).
     if (code) {
-      if (planId === "FREE" || quote.kind === "downgrade") return fail("Un code promo s'applique lors d'une souscription ou d'une montée en gamme.");
+      if (quote.kind === "downgrade") return fail("Un code promo s'applique lors d'une souscription ou d'une montée en gamme.");
       const pre = await precheckStoreCoupon(code, { storeId: ctx.store.id, zone, planId });
       if (!pre.ok) return fail(pre.error, { couponCode: [pre.error] });
     }
@@ -79,35 +83,18 @@ export async function changePlan(storeId: string, planId: PlanId, interval: Inte
       await db.$transaction(async (tx) => {
         await tx.subscription.update({ where: { id: sub.id }, data: { cancelAtPeriodEnd: true } });
         if (sub.currentPeriodEnd) await voidReplacedPlanInvoices(tx, sub.id, new Date(sub.currentPeriodEnd.getTime() - 86_400_000));
-        await audit({ storeId: ctx.store.id, actorId: ctx.user.id, action: planId === "FREE" ? "subscription.cancel_scheduled" : "subscription.downgrade_scheduled", metadata: { from, to: planId, interval, effectiveAt: sub.currentPeriodEnd, hiddenProducts: quote.hiddenProducts } }, tx);
+        await audit({ storeId: ctx.store.id, actorId: ctx.user.id, action: "subscription.downgrade_scheduled", metadata: { from, to: planId, interval, effectiveAt: sub.currentPeriodEnd, hiddenProducts: quote.hiddenProducts } }, tx);
       });
       revalidatePath(`/app/${ctx.store.id}`, "layout");
       return success(undefined, `Changement programmé : ${PLANS[planId].name} à partir du ${sub.currentPeriodEnd?.toLocaleDateString("fr-FR") ?? "prochain renouvellement"}.`);
     }
 
     // Montée ou démarrage payant : impossible tant qu'une facture d'abonnement est échue (sinon on effacerait la dette).
-    if (sub && planId !== "FREE") {
+    if (sub) {
       const overdue = await db.invoice.findMany({ where: { subscriptionId: sub.id, status: "OPEN", dueAt: { lt: now } }, orderBy: { dueAt: "asc" } });
       const notDebt = await nonDebtInvoiceIds(overdue.map((o) => o.id));
       const debt = overdue.find((o) => !notDebt.has(o.id));
       if (debt) return fail(`Réglez d'abord la facture ${debt.number} (échue le ${debt.dueAt.toLocaleDateString("fr-FR")}) pour changer de plan.`);
-    }
-
-    // Passage immédiat au plan Gratuit (essai, ou aucune période payée en cours)
-    if (planId === "FREE") {
-      await db.$transaction(async (tx) => {
-        const s = await tx.subscription.upsert({
-          where: { storeId: ctx.store.id },
-          create: { storeId: ctx.store.id, planId: "FREE", status: "ACTIVE", interval: "MONTHLY", zone, currency, currentPeriodStart: now, currentPeriodEnd: null },
-          update: { planId: "FREE", status: "ACTIVE", interval: "MONTHLY", trialEndsAt: null, currentPeriodStart: now, currentPeriodEnd: null, cancelAtPeriodEnd: false },
-        });
-        await voidReplacedPlanInvoices(tx, s.id);
-        await hideProductsOverLimit(ctx.store.id, "FREE", tx, ctx.user.id);
-        await enqueue("subscription.changed", { storeId: ctx.store.id, from, to: "FREE" }, { storeId: ctx.store.id }, tx);
-        await audit({ storeId: ctx.store.id, actorId: ctx.user.id, action: "subscription.changed", metadata: { from, to: "FREE" } }, tx);
-      });
-      revalidatePath(`/app/${ctx.store.id}`, "layout");
-      return success(undefined, "Vous êtes passé au plan Gratuit. Vos données sont conservées.");
     }
 
     // Montée (avec prorata) ou démarrage d'un plan payant : facture OPEN uniquement.
@@ -117,7 +104,8 @@ export async function changePlan(storeId: string, planId: PlanId, interval: Inte
     invoiceId = await db.$transaction(async (tx) => {
       const s = await tx.subscription.upsert({
         where: { storeId: ctx.store.id },
-        create: { storeId: ctx.store.id, planId: "FREE", status: "ACTIVE", interval: "MONTHLY", zone, currency, currentPeriodStart: now, currentPeriodEnd: null },
+        // Abonnement absent (ne devrait pas arriver) : créé « sans plan », en pause jusqu'au paiement.
+        create: { storeId: ctx.store.id, planId: "FREE", status: "PAUSED", pausedAt: now, interval: "MONTHLY", zone, currency, currentPeriodStart: now, currentPeriodEnd: null },
         update: {},
       });
       // Une demande de changement précédente non réglée est remplacée (jamais un renouvellement ; une demande de changement n'est pas une dette).
@@ -167,14 +155,26 @@ export async function cancelScheduledChange(storeId: string): Promise<ActionResu
   });
 }
 
-/** Résiliation en fin de période (= descente programmée vers Gratuit) ou reprise. */
+/**
+ * Résiliation en fin de période (ou reprise). Plus de plan Gratuit : à l'échéance, la boutique passe EN PAUSE
+ * (vitrine fermée, données conservées) jusqu'au choix d'un nouveau plan.
+ */
 export async function setCancelAtPeriodEnd(storeId: string, cancel: boolean): Promise<ActionResult> {
   if (!cancel) return cancelScheduledChange(storeId);
   return guard(async () => {
     const ctx = await requireStore(storeId, "billing.manage");
     const sub = ctx.store.subscription;
-    if (!sub || sub.planId === "FREE") return fail("Aucun abonnement payant à résilier.");
-    return changePlan(storeId, "FREE", "MONTHLY");
+    if (sub?.coveredBySubscriptionId) return fail(COVERED_MESSAGE);
+    if (sub?.status === "TRIALING") return fail("Rien à résilier pendant l'essai : sans plan choisi, la boutique passera simplement en pause à la fin de l'essai.");
+    if (!sub || sub.planId === "FREE" || !hasRunningPaidPeriod(sub)) return fail("Aucun abonnement payant à résilier.");
+    if (sub.cancelAtPeriodEnd) return fail("Un changement est déjà programmé à l'échéance.");
+    await db.$transaction(async (tx) => {
+      await tx.subscription.update({ where: { id: sub.id }, data: { cancelAtPeriodEnd: true } });
+      if (sub.currentPeriodEnd) await voidReplacedPlanInvoices(tx, sub.id, new Date(sub.currentPeriodEnd.getTime() - 86_400_000));
+      await audit({ storeId: ctx.store.id, actorId: ctx.user.id, action: "subscription.cancel_scheduled", metadata: { from: sub.planId, effectiveAt: sub.currentPeriodEnd } }, tx);
+    });
+    revalidatePath(`/app/${ctx.store.id}`, "layout");
+    return success(undefined, `Résiliation programmée : votre boutique passera en pause le ${sub.currentPeriodEnd?.toLocaleDateString("fr-FR") ?? "prochain renouvellement"}. Vos données sont conservées.`);
   });
 }
 

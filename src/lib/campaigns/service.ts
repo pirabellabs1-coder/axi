@@ -74,8 +74,10 @@ export async function audienceOverview(storeId: string) {
  * Lève CreditError si le solde est insuffisant (rien n'est créé).
  */
 export async function executeCampaign(storeId: string, campaignId: string, actorId: string | null) {
-  const campaign = await db.campaign.findFirst({ where: { id: campaignId, storeId, status: { in: ["DRAFT", "SCHEDULED", "SENDING"] } }, include: { store: { select: { name: true } } } });
+  const campaign = await db.campaign.findFirst({ where: { id: campaignId, storeId, status: { in: ["DRAFT", "SCHEDULED", "SENDING"] } }, include: { store: { select: { name: true, status: true } } } });
   if (!campaign) throw new Error("Campagne introuvable ou déjà envoyée");
+  // Boutique en pause (abonnement) : aucune campagne ne part (contrôle serveur).
+  if (campaign.store.status === "PAUSED") throw new CreditError("Boutique en pause : choisissez un plan pour envoyer vos campagnes.");
   const segment = parseSegment(campaign.segment);
   const recipients = (await resolveAudience(storeId, segment)).slice(0, MAX_RECIPIENTS);
   if (recipients.length === 0) throw new CreditError("Aucun destinataire : aucun client de ce segment n'a accepté vos messages marketing.");
@@ -127,7 +129,8 @@ export async function executeCampaign(storeId: string, campaignId: string, actor
  * à brancher aussi sur le cron des jobs (point d'intégration : /api/jobs/run).
  */
 export async function runDueCampaigns(storeId?: string) {
-  const due = await db.campaign.findMany({ where: { status: "SCHEDULED", scheduledAt: { lte: new Date() }, ...(storeId ? { storeId } : {}) }, select: { id: true, storeId: true, name: true }, take: 3 });
+  // Boutiques en pause : campagnes planifiées laissées en attente (elles partent à la reprise si toujours planifiées).
+  const due = await db.campaign.findMany({ where: { status: "SCHEDULED", scheduledAt: { lte: new Date() }, store: { status: { not: "PAUSED" } }, ...(storeId ? { storeId } : {}) }, select: { id: true, storeId: true, name: true }, take: 3 });
   for (const c of due) {
     try {
       await executeCampaign(c.storeId, c.id, null);

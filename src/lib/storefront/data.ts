@@ -28,6 +28,16 @@ export const getPublicStore = cache(async (slug: string) => {
   return store;
 });
 
+/**
+ * Boutique EN PAUSE (abonnement, src/lib/billing/pause.ts) : données MINIMALES pour la page « Boutique momentanément
+ * fermée » (nom, logo). Jamais de catalogue, de prix ni de moyen de commande : `getPublicStore` / `getStorefront`
+ * renvoient null pour les visiteurs (PAUSED n'est pas un statut public), donc tous les chemins de commande refusent.
+ */
+export const getPausedStorefront = cache(async (slug: string) => {
+  const store = await db.store.findUnique({ where: { slug }, select: { id: true, slug: true, name: true, logoUrl: true, status: true } });
+  return store?.status === "PAUSED" ? { id: store.id, slug: store.slug, name: store.name, logoUrl: store.logoUrl } : null;
+});
+
 /** Cookie posé par l'éditeur d'apparence (valeur = slug) : la boutique s'affiche avec le thème brouillon. */
 export const PREVIEW_COOKIE = "axi_preview";
 

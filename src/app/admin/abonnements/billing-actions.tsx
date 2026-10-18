@@ -72,6 +72,7 @@ const STATUSES: { value: SubscriptionStatus; label: string }[] = [
   { value: "ACTIVE", label: "Actif" },
   { value: "PAST_DUE", label: "Impayé" },
   { value: "SUSPENDED", label: "Suspendu" },
+  { value: "PAUSED", label: "En pause" },
   { value: "CANCELLED", label: "Annulé" },
 ];
 

@@ -41,11 +41,11 @@ export async function pendingPlanChange(subscriptionId: string, tx: Tx | typeof 
  *    période démarre à la confirmation (confirmInvoicePayment). Le temps restant de la période payée est
  *    crédité sur la facture (prorata en unités entières, arrondi à l'inférieur). Non réglée à
  *    l'échéance (7 j), la demande expire (VOID) sans dette ni suspension.
- *  - Descente (plan inférieur, annuel → mensuel, ou Gratuit) : EN FIN DE PÉRIODE. L'abonnement garde
+ *  - Descente (plan inférieur, annuel → mensuel) ou résiliation : EN FIN DE PÉRIODE. L'abonnement garde
  *    le plan courant jusqu'à currentPeriodEnd. Pas de champ dédié dans le schéma : on pose
  *    `cancelAtPeriodEnd = true` et on journalise `subscription.downgrade_scheduled` (AuditLog,
- *    metadata { to, interval, effectiveAt }). Sans cet événement, cancelAtPeriodEnd signifie « passage
- *    au plan Gratuit ». L'application a lieu dans applyScheduledChange() (lifecycle.ts).
+ *    metadata { to, interval, effectiveAt }). Sans cet événement, cancelAtPeriodEnd signifie « résiliation » :
+ *    à l'échéance, la boutique passe EN PAUSE (plus de plan Gratuit). L'application a lieu dans applyScheduledChange() (lifecycle.ts).
  *  - Lors d'une descente, les produits au-delà de la limite du nouveau plan passent en brouillon
  *    (DRAFT, jamais supprimés) ; la liste est journalisée (`subscription.products_hidden`).
  *  - Factures numérotées AXI-{AAAA}-{000001}, montants en unités natives (EUR centimes, XOF entier).
@@ -211,11 +211,17 @@ export async function confirmInvoicePayment(invoiceId: string, source: ConfirmSo
       await audit({ storeId: sub.storeId, action: "subscription.downgrade_applied", metadata: { from: sub.planId, to: invoice.planId, hiddenProducts: hidden.length, via: "payment" } }, tx);
     }
     if (isChange) {
-      // Démarrage d'un plan inférieur au plan d'essai : produits au-delà de la limite en brouillon.
-      if (PLAN_ORDER.indexOf(invoice.planId as PlanId) < PLAN_ORDER.indexOf(previousPlan)) await hideProductsOverLimit(sub.storeId, invoice.planId as PlanId, tx, source.actorId);
+      // Démarrage d'un plan (après essai ou pause) : produits au-delà de la limite du plan choisi en brouillon.
+      // Comparé aux LIMITES et non au rang : une boutique en pause (niveau interne FREE) peut avoir plus de
+      // produits que le plan qu'elle souscrit. Sans effet si la limite est respectée.
+      if (PLAN_ORDER.indexOf(invoice.planId as PlanId) < PLAN_ORDER.indexOf(previousPlan) || previousPlan === "FREE") await hideProductsOverLimit(sub.storeId, invoice.planId as PlanId, tx, source.actorId);
       await audit({ storeId: sub.storeId, actorId: source.actorId ?? null, action: "subscription.changed", target: invoice.id, metadata: { from: sub.planId, to: invoice.planId, interval: decision.interval, via: "payment", periodStart: decision.periodStart, periodEnd: decision.periodEnd } }, tx);
     }
     await enqueue("subscription.changed", { storeId: sub.storeId, subscriptionId: sub.id, planId: invoice.planId, status: "ACTIVE", invoiceId: invoice.id }, { storeId: sub.storeId }, tx);
+    // Boutique en pause : réouverte dès la confirmation (statut précédent restauré), boutiques couvertes comprises.
+    const { reconcileStorePause, syncCoveredSubscriptions } = await import("./pause");
+    await reconcileStorePause(tx, sub.storeId, now);
+    await syncCoveredSubscriptions(sub.id, tx, now);
     await audit({ storeId: sub.storeId, actorId: source.actorId ?? null, action: "invoice.paid", target: invoice.id, metadata: { number: invoice.number, kind: "plan", via: source.via, providerRef: source.providerRef ?? null, amount: invoice.amount, currency: invoice.currency } }, tx);
     return { ok: true, kind: "plan" as const };
   };

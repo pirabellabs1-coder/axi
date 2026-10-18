@@ -13,6 +13,8 @@ import { slugify, normalizePhone, addDays } from "@/lib/utils";
 import { currencyDecimals } from "@/lib/money";
 import { COUNTRIES, RESERVED_SLUGS, getCountry } from "@/config/site";
 import { TRIAL_DAYS, TRIAL_PLAN, ZONE_CURRENCY, zoneForCurrency } from "@/config/plans";
+import { coverageMirror, shouldPauseStore } from "@/lib/billing/rules";
+import { BILLING_PAUSE_MESSAGE, BILLING_PAUSE_REASON } from "@/lib/billing/pause-copy";
 import { getAccountStoresQuota, lockAccountForStoreCreation, storeWithinAccountLimit } from "@/lib/store/account-quota-service";
 import { OVER_STORE_LIMIT_REASON, type AccountStoresQuota } from "@/lib/store/account-quota";
 import { audit } from "@/lib/audit";
@@ -63,8 +65,9 @@ export async function isSlugAvailable(slug: string): Promise<{ available: boolea
 }
 
 /**
- * Création d'une boutique (brouillon) : secteur + thème, abonnement (essai Business pour la première boutique,
- * zone tarifaire déduite de la devise), membership OWNER, moyens de paiement et zone de livraison par défaut.
+ * Création d'une boutique (brouillon) : secteur + thème, abonnement (essai Business de 14 jours pour la première
+ * boutique du compte, boutiques suivantes couvertes par l'abonnement de la boutique principale ; zone tarifaire
+ * déduite de la devise), membership OWNER, moyens de paiement et zone de livraison par défaut.
  */
 export async function createStore(_prev: ActionResult | undefined, formData: FormData): Promise<ActionResult> {
   return guard(async () => {
@@ -94,6 +97,18 @@ export async function createStore(_prev: ActionResult | undefined, formData: For
       await lockAccountForStoreCreation(tx, user.id);
       const quota = await getAccountStoresQuota(user.id, tx);
       if (!quota.allowed || quota.firstStore !== isFirstStore) return null;
+      // Abonnement (plus de plan Gratuit) :
+      //  - première boutique du compte : essai TRIAL_PLAN de TRIAL_DAYS jours, sans carte ;
+      //  - boutique suivante (place du plan du compte ou option « Boutique en plus ») : COUVERTE par l'abonnement de la
+      //    boutique principale du compte (même plan, même essai ou période, même pause) ; aucune facture propre.
+      //    Pas de nouvel essai : un compte n'a qu'un essai, la boutique principale porte la facturation.
+      const primary = isFirstStore || !quota.primaryStoreId ? null : await tx.subscription.findUnique({ where: { storeId: quota.primaryStoreId } });
+      const root = primary?.coveredBySubscriptionId ? await tx.subscription.findUnique({ where: { id: primary.coveredBySubscriptionId } }) : primary;
+      // Un seul essai par compte : il n'est accordé qu'à la toute première boutique (aucune boutique possédée, même
+      // archivée). Un compte qui a tout archivé puis recrée une boutique démarre SANS plan (en pause), avec le
+      // chemin de paiement : pas d'essai illimité par archivage.
+      const trial = isFirstStore && !root;
+      const noPlan = !root && !trial;
       const s = await tx.store.create({
         data: {
           name,
@@ -109,10 +124,13 @@ export async function createStore(_prev: ActionResult | undefined, formData: For
           contactEmail: user.email,
           onboardingStep: 1,
           subscription: {
-            create: isFirstStore
-              ? { planId: TRIAL_PLAN, status: "TRIALING", zone, currency: billingCurrency, trialEndsAt: addDays(now, TRIAL_DAYS), currentPeriodEnd: addDays(now, TRIAL_DAYS) }
-              : { planId: "FREE", status: "ACTIVE", zone, currency: billingCurrency },
+            create: root
+              ? { ...coverageMirror(root, now), coveredBySubscriptionId: root.id }
+              : trial
+                ? { planId: TRIAL_PLAN, status: "TRIALING", zone, currency: billingCurrency, trialEndsAt: addDays(now, TRIAL_DAYS), currentPeriodEnd: addDays(now, TRIAL_DAYS) }
+                : { planId: "FREE", status: "PAUSED", pausedAt: now, zone, currency: billingCurrency },
           },
+          ...(noPlan ? { status: "PAUSED" as const, statusBeforePause: "DRAFT" as const, statusReason: BILLING_PAUSE_REASON } : {}),
           memberships: { create: { userId: user.id, role: "OWNER" } },
           paymentMethods: {
             create: [{ kind: "CASH_ON_DELIVERY", label: "Paiement à la livraison ou au retrait", instructions: "Réglez en espèces à la réception de votre commande.", position: 0 }],
@@ -129,6 +147,8 @@ export async function createStore(_prev: ActionResult | undefined, formData: For
       return s;
     });
     if (!store) return fail(storesQuotaMessage(await getAccountStoresQuota(user.id)));
+    // Sans plan (essai déjà consommé par ce compte) : droit au choix du plan et au paiement.
+    if (store.status === "PAUSED") redirect(`/app/${store.id}/abonnement#plans`);
     redirect(doneForYou ? `/app/${store.id}/options?addon=DONE_FOR_YOU` : `/app/${store.id}/demarrage`);
   });
 }
@@ -198,11 +218,11 @@ export async function changeStoreCurrency(_prev: ActionResult | undefined, formD
       if (off.length) await tx.paymentMethod.updateMany({ where: { storeId, id: { in: off } }, data: { active: false } });
       await tx.storeCurrency.deleteMany({ where: { storeId, currency: to } });
       await tx.store.update({ where: { id: storeId }, data: { currency: to } });
-      // Les offres Axi suivent la devise : tant qu'aucun abonnement payant n'est en cours (essai ou gratuit),
+      // Les offres Axi suivent la devise : tant qu'aucun abonnement payant n'est en cours (essai ou pause),
       // la zone et la devise de facturation basculent aussi ; sinon elles changent au prochain changement de plan.
       const zone = zoneForCurrency(to);
       await tx.subscription.updateMany({
-        where: { storeId, zone: { not: zone }, OR: [{ status: "TRIALING" }, { planId: "FREE" }] },
+        where: { storeId, zone: { not: zone }, coveredBySubscriptionId: null, OR: [{ status: "TRIALING" }, { planId: "FREE" }] },
         data: { zone, currency: ZONE_CURRENCY[zone] },
       });
       await audit({ storeId, actorId: ctx.user.id, action: "store.currency_changed", metadata: { from, to, disabledGateways: off.length } }, tx);
@@ -334,6 +354,8 @@ export async function publishStore(storeId: string): Promise<ActionResult> {
     if (methods === 0) missing.push("un moyen de paiement actif");
     if (missing.length) return fail(`Avant de publier, ajoutez ${missing.join(", ")}.`);
     if (s.status === "SUSPENDED") return fail("Boutique suspendue par la plateforme.");
+    // En pause, ou sans plan ouvrant droit (essai échu avant le passage du cron) : pas de mise en ligne.
+    if (s.status === "PAUSED" || (!!s.subscription && shouldPauseStore(s.subscription))) return fail(BILLING_PAUSE_MESSAGE);
     if (!(await withinOwnerLimit(storeId))) return fail(OVER_STORE_LIMIT_REASON);
 
     const refused = await db.$transaction(async (tx) => {
@@ -361,6 +383,8 @@ export async function setStoreStatus(storeId: string, status: "PUBLISHED" | "CLO
   return guard(async () => {
     const ctx = await requireStore(storeId, status === "ARCHIVED" ? "store.delete" : "store.publish");
     if (ctx.store.status === "SUSPENDED") return fail("Boutique suspendue par la plateforme.");
+    // En pause (abonnement) : seule la réouverture par paiement lève la pause ; l'archivage reste possible.
+    if ((ctx.store.status === "PAUSED" || (!!ctx.store.subscription && shouldPauseStore(ctx.store.subscription))) && status !== "ARCHIVED") return fail(BILLING_PAUSE_MESSAGE);
     if (status !== "ARCHIVED" && !(await withinOwnerLimit(storeId))) return fail(OVER_STORE_LIMIT_REASON);
     const refused = await db.$transaction(async (tx) => {
       // Désarchivage : la boutique reprend une place du compte → même verrou et même contrôle qu'une création.
@@ -368,7 +392,7 @@ export async function setStoreStatus(storeId: string, status: "PUBLISHED" | "CLO
         const denied = await unarchiveDenied(tx, storeId);
         if (denied) return denied;
       }
-      await tx.store.update({ where: { id: storeId }, data: { status, statusReason: reason ?? null } });
+      await tx.store.update({ where: { id: storeId }, data: { status, statusReason: reason ?? null, ...(status === "ARCHIVED" ? { statusBeforePause: null } : {}) } });
       await audit({ storeId, actorId: ctx.user.id, action: `store.status.${status.toLowerCase()}`, metadata: { reason } }, tx);
       return null;
     });

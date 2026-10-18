@@ -20,6 +20,7 @@ const STATUS: Record<string, { label: string; tone: "neutral" | "success" | "war
   CLOSED_TEMPORARILY: { label: "Fermée temporairement", tone: "warning" },
   SUSPENDED: { label: "Suspendue", tone: "danger" },
   ARCHIVED: { label: "Archivée", tone: "neutral" },
+  PAUSED: { label: "En pause : choisir un plan", tone: "warning" },
 };
 
 export default async function AppHome() {

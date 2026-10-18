@@ -13,7 +13,8 @@ export async function GET(req: Request) {
   if (!host || host.length > 253 || !/^[a-z0-9.-]+$/.test(host)) return new Response("Bad Request", { status: 400 });
 
   const d = await db.domain.findUnique({ where: { hostname: host }, select: { verified: true, store: { select: { slug: true, status: true } } } });
-  if (!d?.verified || (d.store.status !== "PUBLISHED" && d.store.status !== "CLOSED_TEMPORARILY")) {
+  // PAUSED (abonnement) : résolu pour afficher la page « Boutique momentanément fermée » (aucun catalogue exposé).
+  if (!d?.verified || (d.store.status !== "PUBLISHED" && d.store.status !== "CLOSED_TEMPORARILY" && d.store.status !== "PAUSED")) {
     return new Response("Not Found", { status: 404, headers: { "Cache-Control": "public, s-maxage=30" } });
   }
   return Response.json({ slug: d.store.slug }, { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" } });

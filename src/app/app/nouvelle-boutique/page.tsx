@@ -127,7 +127,8 @@ export default async function NewStorePage({ searchParams }: { searchParams: Pro
             domain={SITE.domain}
             countries={countries}
             zoneLabel={ZONE_LABEL}
-            firstStore={first}
+            firstStore={quota.firstStore}
+            accountPlanName={quota.bestPlan === "FREE" ? undefined : PLANS[quota.bestPlan].name}
             trial={{ planName: PLANS[TRIAL_PLAN].name, days: TRIAL_DAYS, price: trialPrice }}
             doneForYou={{ name: dfy.name, description: dfy.description, price: byZone((z) => formatMoney(dfy.price[z], ZONE_CURRENCY[z])) }}
           />

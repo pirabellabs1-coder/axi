@@ -18,6 +18,7 @@
     "db:local": "node scripts/dev-db.mjs",
     "media:migrate": "node --conditions=react-server --import tsx scripts/migrate-images.ts",
     "media:orphans": "node --conditions=react-server --import tsx scripts/media-orphans.ts",
+    "billing:migrate-free": "node --conditions=react-server --import tsx scripts/migrate-free-plan.ts",
     "e2e": "playwright test",
     "e2e:report": "playwright show-report e2e-report"
   },

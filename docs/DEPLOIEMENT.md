@@ -69,6 +69,12 @@ pnpm prisma migrate deploy
 # Base locale déjà créée par `db push` : marquez-la appliquée avec
 #   pnpm prisma migrate resolve --applied 20261011000000_init
 
+# Suppression du plan Gratuit (18/10/2026) : migration 20261018200158_plan_free_removal_pause, puis
+# nouvel essai Business de 14 jours pour chaque boutique encore en Gratuit (idempotent, rejouable) :
+pnpm billing:migrate-free --dry-run   # inventaire
+pnpm billing:migrate-free
+# (le cron /api/jobs/run applique aussi cette étape à chaque passage, par sécurité)
+
 # Données de démo : UNIQUEMENT sur un environnement de démo/staging
 pnpm db:seed
 ```

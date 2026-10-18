@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Receipt, CalendarClock, ArrowUpRight } from "lucide-react";
 import { getStoreContext, effectivePlanId } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
-import { PLANS, PLAN_ORDER, PAST_DUE_GRACE_DAYS, ZONE_LABEL, ZONE_CURRENCY, type Interval, type PlanId } from "@/config/plans";
+import { PLANS, PUBLIC_PLANS, PAST_DUE_GRACE_DAYS, ZONE_LABEL, ZONE_CURRENCY, type Interval, type PlanId } from "@/config/plans";
 import { getUsage } from "@/lib/commerce/quotas";
 import { effectiveLimits } from "@/lib/addons/service";
 import { syncStoreBilling } from "@/lib/billing/lifecycle";
@@ -58,14 +58,15 @@ export default async function SubscriptionPage({ params }: { params: Promise<{ s
   ]);
   const invoices = invoicesRaw.filter((i) => i.status !== "VOID" || i.paidAt);
 
-  const combos = PLAN_ORDER.flatMap((p) => (["MONTHLY", "YEARLY"] as Interval[]).map((i) => [p, i] as const));
+  // Plans vendables uniquement (plus de plan Gratuit).
+  const combos = PUBLIC_PLANS.flatMap((p) => (["MONTHLY", "YEARLY"] as Interval[]).map((i) => [p, i] as const));
   const quotes: QuoteDTO[] = (await Promise.all(combos.map(([p, i]) => quotePlanChange(store.id, sub, zone, p, i, now)))).map((q) => ({
     ...q,
     effectiveAt: q.effectiveAt ? q.effectiveAt.toISOString() : null,
   }));
   // Prix effectifs (surcharges /admin/tarifs comprises), calculés côté serveur pour les cartes client.
   const cards = await Promise.all(
-    PLAN_ORDER.map(async (id) => {
+    PUBLIC_PLANS.map(async (id) => {
       const [m, y] = await Promise.all([getEffectivePlanPriceFor(id, zone, "MONTHLY"), getEffectivePlanPriceFor(id, zone, "YEARLY")]);
       return { id, monthly: m.amount, yearly: y.amount, yearlyPerMonth: y.perMonth };
     }),
@@ -75,6 +76,9 @@ export default async function SubscriptionPage({ params }: { params: Promise<{ s
   const trialDaysLeft = isTrial ? Math.max(0, Math.ceil((sub!.trialEndsAt!.getTime() - now.getTime()) / DAY)) : null;
   const pastDue = sub?.status === "PAST_DUE";
   const suspended = sub?.status === "SUSPENDED";
+  // Boutique en pause (plus de plan Gratuit) : fin d'essai, résiliation échue ou impayé.
+  const paused = store.status === "PAUSED" || sub?.status === "PAUSED";
+  const covered = !!sub?.coveredBySubscriptionId;
   // Dette d'abonnement = factures de plan hors options et hors demande de changement en attente.
   const openPlanInvoices = invoices.filter((i) => i.status === "OPEN" && !notDebt.has(i.id)).sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime());
   const openInvoice = openPlanInvoices[0] ?? invoices.find((i) => i.status === "OPEN" && i.id !== pending?.id);
@@ -84,7 +88,9 @@ export default async function SubscriptionPage({ params }: { params: Promise<{ s
   const currentPrice = await getEffectivePlanPriceFor((sub?.planId as PlanId) ?? planId, zone, interval);
 
   const statusBadge = suspended ? (
-    <Badge tone="danger" dot>Suspendu</Badge>
+    <Badge tone="danger" dot>Suspendu, boutique en pause</Badge>
+  ) : paused ? (
+    <Badge tone="warning" dot>Boutique en pause</Badge>
   ) : isTrial ? (
     <Badge tone="sun" dot>Essai, {trialDaysLeft} j restants</Badge>
   ) : pastDue ? (
@@ -103,19 +109,30 @@ export default async function SubscriptionPage({ params }: { params: Promise<{ s
       <div className="mt-6 space-y-3">
         {suspended && (
           <Alert tone="danger" title="Fonctions payantes suspendues">
-            La facture {openInvoice?.number ?? ""} n'a pas été réglée dans le délai de grâce de {PAST_DUE_GRACE_DAYS} jours. Votre boutique fonctionne sur le plan Gratuit, toutes vos données sont conservées.{" "}
+            La facture {openInvoice?.number ?? ""} n'a pas été réglée dans le délai de grâce de {PAST_DUE_GRACE_DAYS} jours. Votre boutique est en pause (vitrine fermée), toutes vos données sont conservées et elle rouvre dès le paiement.{" "}
             {openInvoice && <Link href={`/app/${store.id}/abonnement/factures/${openInvoice.id}`} className="font-semibold underline underline-offset-2">Régler la facture pour tout réactiver</Link>}
+          </Alert>
+        )}
+        {covered && (
+          <Alert tone="info" title="Abonnement porté par la boutique principale">
+            Cette boutique est couverte par l'abonnement de la boutique principale de votre compte (option « Boutique en plus » ou boutique incluse dans le plan) : même plan, même essai, même échéance. Changez de plan ou payez depuis la boutique principale.
+          </Alert>
+        )}
+        {paused && !suspended && !covered && (
+          <Alert tone="warning" title="Boutique en pause">
+            {sub?.trialEndsAt ? `Votre essai gratuit s'est terminé le ${formatDate(sub.trialEndsAt)}.` : "Aucun plan n'est actif."} Votre vitrine affiche « Boutique momentanément fermée ». Rien n'est supprimé : choisissez un plan ci-dessous et réglez la facture, la boutique rouvre automatiquement dès la confirmation du paiement.{" "}
+            <Link href="#plans" className="font-semibold underline underline-offset-2">Choisir un plan</Link>
           </Alert>
         )}
         {pastDue && (
           <Alert tone="danger" title="Paiement en retard">
-            Vos fonctions restent actives jusqu'au {graceEnd ? formatDate(graceEnd) : `${PAST_DUE_GRACE_DAYS}e jour après l'échéance`}, puis elles seront suspendues (données conservées).{" "}
+            Vos fonctions restent actives jusqu'au {graceEnd ? formatDate(graceEnd) : `${PAST_DUE_GRACE_DAYS}e jour après l'échéance`}, puis la boutique sera mise en pause (données conservées).{" "}
             {openInvoice && <Link href={`/app/${store.id}/abonnement/factures/${openInvoice.id}`} className="font-semibold underline underline-offset-2">Payer la facture {openInvoice.number}</Link>}
           </Alert>
         )}
         {isTrial && (
           <Alert tone="info" title={`Essai ${PLANS[sub!.planId as PlanId].name} : ${trialDaysLeft} jour${trialDaysLeft === 1 ? "" : "s"} restant${trialDaysLeft === 1 ? "" : "s"}`}>
-            À la fin de l'essai, la boutique passe au plan Gratuit sans perte de données (produits au-delà de 15 mis en brouillon). Choisissez un plan pour continuer sans interruption.
+            Sans plan payant à la fin de l'essai, la boutique est mise en pause (vitrine fermée, aucune donnée supprimée) jusqu'au paiement. Choisissez un plan pour continuer sans interruption.
           </Alert>
         )}
         {pending && pendingPlan && (
@@ -147,7 +164,7 @@ export default async function SubscriptionPage({ params }: { params: Promise<{ s
             <div>
               <dt className="text-ink-muted">Prix</dt>
               <dd className="mt-0.5 font-medium text-ink tabular">
-                {isTrial ? "Offert pendant l'essai" : currentPrice.amount ? `${formatMoney(currentPrice.amount, currency)} / ${interval === "YEARLY" ? "an" : "mois"}` : "Gratuit"}
+                {isTrial ? "Offert pendant l'essai" : currentPrice.amount ? `${formatMoney(currentPrice.amount, currency)} / ${interval === "YEARLY" ? "an" : "mois"}` : "Aucun plan actif"}
               </dd>
             </div>
             <div>
@@ -169,7 +186,7 @@ export default async function SubscriptionPage({ params }: { params: Promise<{ s
               <p className="flex items-start gap-2 text-sm text-ink">
                 <CalendarClock className="mt-0.5 size-4 shrink-0 text-ink-muted" aria-hidden />
                 <span>
-                  Passage au plan <strong>{PLANS[scheduled.to].name}</strong> le {scheduled.effectiveAt ? formatDate(scheduled.effectiveAt) : "prochain renouvellement"}.
+                  {scheduled.to === "FREE" ? <>Résiliation : la boutique passera <strong>en pause</strong> le</> : <>Passage au plan <strong>{PLANS[scheduled.to].name}</strong> le</>} {scheduled.effectiveAt ? formatDate(scheduled.effectiveAt) : "prochain renouvellement"}.
                 </span>
               </p>
               <CancelControls storeId={store.id} cancelAtPeriodEnd />
@@ -177,7 +194,7 @@ export default async function SubscriptionPage({ params }: { params: Promise<{ s
           )}
 
           <div className="mt-auto flex flex-wrap items-center gap-2 pt-6">
-            <ButtonLink href="#plans" variant="primary" size="sm">Changer de plan</ButtonLink>
+            <ButtonLink href="#plans" variant="primary" size="sm">{paused ? "Choisir un plan" : "Changer de plan"}</ButtonLink>
             <ButtonLink href={`/app/${store.id}/options`} variant="outline" size="sm">Options et crédits</ButtonLink>
             {sub && sub.planId !== "FREE" && !isTrial && !scheduled && <CancelControls storeId={store.id} cancelAtPeriodEnd={false} />}
           </div>
@@ -186,7 +203,7 @@ export default async function SubscriptionPage({ params }: { params: Promise<{ s
         <Card as="section" aria-labelledby="usage-title">
           <CardHeader
             title={<span id="usage-title">Utilisation ce mois-ci</span>}
-            description={`Remise à zéro le 1er du mois. ${planId === "FREE" ? "Au-delà de 20 commandes, les nouvelles commandes sont marquées « hors quota »." : ""}`}
+            description="Remise à zéro le 1er du mois."
             action={<Link href="#plans" className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-primary hover:underline">Augmenter <ArrowUpRight className="size-3.5" aria-hidden /></Link>}
           />
           <CardBody className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">

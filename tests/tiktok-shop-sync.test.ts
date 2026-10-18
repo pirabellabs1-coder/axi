@@ -200,6 +200,33 @@ describe("publication produit (client simulé)", () => {
   });
 });
 
+describe("boutique en pause (abonnement)", () => {
+  const link = { categoryId: "601226", categoryName: "Femme › Robes", attributes: [{ id: "100347", values: [{ id: "1000060" }] }], skus: {}, pushedStock: {}, status: "draft" };
+
+  it("pause : toutes les annonces à 0 ; reprise : le stock réel est renvoyé", async () => {
+    cfg(A).products = { prod_A_0001: link };
+    await publishProduct(A, "prod_A_0001", { fetchImage: async () => new Uint8Array([1]) });
+    const l = () => cfg(A).products.prod_A_0001;
+    const inv = () => fakeState().products.get(l().tiktokProductId)!.inventory.get(l().skus._);
+    expect(await syncStock(A, undefined, { zero: true })).toEqual({ products: 1, skus: 1 });
+    expect(inv()).toBe(0);
+    expect(l().pushedStock._).toBe(0);
+    expect(await syncStock(A, undefined, { zero: true })).toEqual({ products: 0, skus: 0 }); // idempotent
+    expect(await syncStock(A)).toEqual({ products: 1, skus: 1 });
+    expect(inv()).toBe(4);
+  });
+
+  it("reprise : la relève repart du dernier passage (les commandes de la période de pause sont réimportées)", async () => {
+    const pausedSince = NOW - 5 * 86_400_000;
+    cfg(A).orders = { lastPullAt: pausedSince, lastImportAt: null, imported: 0 }; // aucune relève pendant la pause (jobs tiktok_shop.sync écartés)
+    const api = new FakeTiktokShopClient();
+    api.searchOrders = vi.fn(async () => ({ orders: [], nextPageToken: null })) as any;
+    await pullOrders(A, api, NOW);
+    expect(api.searchOrders).toHaveBeenCalledWith(expect.objectContaining({ updateTimeGe: pausedSince - 10 * 60_000 }));
+    expect(cfg(A).orders.lastPullAt).toBe(NOW);
+  });
+});
+
 describe("expéditions", () => {
   function seedOrder(fulfilledBy: "seller" | "tiktok" = "seller") {
     t().order = [{ id: "ord_A_0001", storeId: A, idempotencyKey: "tiktok_shop:576", attribution: { source: "tiktok_shop", tiktok: { orderId: "576", fulfilledBy, deliveryOptionId: "DO1", lineItems: { item_1: ["li1", "li2"] } } } }];

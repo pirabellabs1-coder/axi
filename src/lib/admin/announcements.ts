@@ -9,7 +9,7 @@ export type AnnouncementAudience = (typeof ANNOUNCEMENT_AUDIENCES)[number];
 
 export const AUDIENCE_LABEL: Record<AnnouncementAudience, string> = {
   all: "Tous les marchands",
-  free: "Plan Gratuit",
+  free: "Sans plan (boutiques en pause)",
   paid: "Plans payants",
   "zone:AFRICA": "Zone Afrique (FCFA)",
   "zone:WORLD": "Zone Monde (EUR)",

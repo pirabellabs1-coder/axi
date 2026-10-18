@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { currentPeriod } from "@/lib/utils";
 import { billingZone } from "@/lib/billing/rules";
 import { PlatformAnnouncements } from "@/components/app/announcements";
+import { BillingPauseBanner } from "@/components/app/billing-pause-banner";
 
 export default async function StoreLayout({ children, params }: { children: React.ReactNode; params: Promise<{ storeId: string }> }) {
   const { storeId } = await params;
@@ -42,13 +43,14 @@ export default async function StoreLayout({ children, params }: { children: Reac
       }}
       stores={stores.filter((s) => s.status !== "ARCHIVED").map((s) => ({ id: s.id, name: s.name, slug: s.slug, logoUrl: s.logoUrl }))}
       role={ctx.role}
-      plan={{ id: ctx.planId, name: plan.name, trialDaysLeft, pastDue: sub?.status === "PAST_DUE" }}
+      plan={{ id: ctx.planId, name: plan.name, trialDaysLeft, pastDue: sub?.status === "PAST_DUE", paused: store.status === "PAUSED" }}
       counts={{ newOrders, unread, returns: pendingReturns }}
       usage={{
         orders: { used: ordersUsage, limit: plan.limits.ordersPerMonth },
         products: { used: productsCount, limit: plan.limits.products },
       }}
     >
+      <BillingPauseBanner storeId={store.id} storeStatus={store.status} sub={sub ?? null} canBill={ctx.can("billing.manage")} now={new Date()} />
       <PlatformAnnouncements planId={ctx.planId} zone={billingZone(sub, store.currency)} />
       {children}
     </AppShell>

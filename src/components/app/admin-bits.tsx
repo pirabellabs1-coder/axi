@@ -69,6 +69,7 @@ export const STORE_STATUS: Record<string, { label: string; tone: BadgeTone }> = 
   CLOSED_TEMPORARILY: { label: "Fermée", tone: "warning" },
   SUSPENDED: { label: "Suspendue", tone: "danger" },
   ARCHIVED: { label: "Archivée", tone: "neutral" },
+  PAUSED: { label: "En pause (abonnement)", tone: "warning" },
 };
 
 export const SUB_STATUS: Record<string, { label: string; tone: BadgeTone }> = {
@@ -77,6 +78,7 @@ export const SUB_STATUS: Record<string, { label: string; tone: BadgeTone }> = {
   PAST_DUE: { label: "Impayé", tone: "warning" },
   SUSPENDED: { label: "Suspendu", tone: "danger" },
   CANCELLED: { label: "Annulé", tone: "neutral" },
+  PAUSED: { label: "En pause", tone: "warning" },
 };
 
 export const INVOICE_STATUS: Record<string, { label: string; tone: BadgeTone }> = {
