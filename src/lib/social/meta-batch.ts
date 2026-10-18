@@ -55,7 +55,7 @@ export function diffCatalog(desired: DesiredItem[], existing: ExistingItem[], op
 
 export type BatchRequest = { method: "UPDATE"; data: MetaItemData } | { method: "DELETE"; data: { id: string } };
 
-/** Requêtes `items_batch` découpées en lots (Meta accepte jusqu'à 5 000 requêtes par appel ; on reste prudent). */
+/** Requêtes `items_batch` découpées en lots (Meta : 5 000 requêtes et 28 Mo par appel, moins de 3 000 recommandé). */
 export function buildBatchRequests(diff: Pick<CatalogDiff, "upserts" | "deletes">, chunkSize = 500): BatchRequest[][] {
   const all: BatchRequest[] = [
     ...diff.deletes.map((e) => ({ method: "DELETE" as const, data: { id: e.retailerId } })),
@@ -110,6 +110,68 @@ export function redactSecrets(text: string, secrets: (string | null | undefined)
 export function sanitizeError(text: string, max = 500, secrets: (string | null | undefined)[] = []): string {
   const clean = redactSecrets(String(text ?? ""), secrets).replace(/\s+/g, " ").trim();
   return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
+}
+
+/* ───────────────────────── Suivi asynchrone (check_batch_request_status) ───────────────────────── */
+
+/** Réponse de `check_batch_request_status` (champs demandés). */
+export type BatchStatusResponse = {
+  data?: {
+    handle?: string;
+    status?: string;
+    errors?: { id?: string; line?: number; message?: string }[];
+    errors_total_count?: number;
+    warnings_total_count?: number;
+    ids_of_invalid_requests?: string[];
+  }[];
+};
+
+export type BatchStatusOutcome =
+  /** Meta n'a pas fini (scheduled, dispatched, started) : on revient plus tard. */
+  | { state: "pending" }
+  /** Terminé : les requêtes invalides n'ont PAS été enregistrées par Meta (message par article si disponible). */
+  | { state: "finished"; invalid: { retailerId: string; error: string }[]; errorsTotal: number }
+  /** Annulé ou erreur interne Meta : certaines requêtes ont pu ne pas aboutir, le lot doit être renvoyé. */
+  | { state: "failed"; status: string };
+
+/** Interprète le statut d'un lot (valeurs documentées, casse indifférente). */
+export function interpretBatchStatus(response: BatchStatusResponse): BatchStatusOutcome {
+  const row = response.data?.[0];
+  const status = (row?.status ?? "").toLowerCase();
+  if (status === "finished") {
+    const messages = new Map<string, string>();
+    for (const e of row?.errors ?? []) if (e.id && e.message && !messages.has(e.id)) messages.set(e.id, sanitizeError(e.message, 300));
+    const ids = [...new Set([...(row?.ids_of_invalid_requests ?? []), ...messages.keys()])].filter((id) => typeof id === "string" && id.length <= 100);
+    return {
+      state: "finished",
+      invalid: ids.map((retailerId) => ({ retailerId, error: messages.get(retailerId) ?? "Refusé par Meta pendant le traitement (détail dans Commerce Manager > Problèmes)." })),
+      errorsTotal: Math.max(row?.errors_total_count ?? 0, ids.length),
+    };
+  }
+  if (status === "canceled" || status === "cancelled" || status === "error") return { state: "failed", status };
+  return { state: "pending" };
+}
+
+/** Vérifications du traitement Meta : 1, 2, 5, 15, 30 puis 60 min après l'envoi ; abandon au-delà. */
+const STATUS_CHECK_DELAYS_MIN = [1, 2, 5, 15, 30, 60];
+export const MAX_STATUS_CHECKS = STATUS_CHECK_DELAYS_MIN.length;
+
+export function statusCheckDelayMs(attempt: number): number | null {
+  const d = STATUS_CHECK_DELAYS_MIN[Math.max(0, Math.floor(attempt))];
+  return d == null ? null : d * 60_000;
+}
+
+/** Charge utile du job de suivi (`social.sync` avec `check`), validée à la lecture. */
+export type StatusCheckPayload = { handles: string[]; sentAt: string; attempt: number };
+
+export function readStatusCheck(raw: unknown): StatusCheckPayload | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  const handles = Array.isArray(r.handles) ? r.handles.filter((h): h is string => typeof h === "string" && /^[A-Za-z0-9_:.=-]{1,200}$/.test(h)).slice(0, 50) : [];
+  const sentAt = typeof r.sentAt === "string" && !Number.isNaN(Date.parse(r.sentAt)) ? r.sentAt : null;
+  const attempt = typeof r.attempt === "number" && Number.isInteger(r.attempt) && r.attempt >= 0 && r.attempt < MAX_STATUS_CHECKS ? r.attempt : null;
+  if (!handles.length || !sentAt || attempt == null) return null;
+  return { handles, sentAt, attempt };
 }
 
 export const SYNC_INTERVAL_MS = 60 * 60_000; // 1 h : sans changement, aucun appel à Meta (diff vide)

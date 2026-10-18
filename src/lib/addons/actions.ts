@@ -4,7 +4,8 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { requireStore } from "@/lib/auth/permissions";
+import { requireStore, requireUserOrThrow } from "@/lib/auth/permissions";
+import { getAccountStoresQuota } from "@/lib/store/account-quota-service";
 import { guard, fail, success, type ActionResult } from "@/lib/action";
 import { getAddOn, ZONE_CURRENCY, type PlanId } from "@/config/plans";
 import { billingZone } from "@/lib/billing/rules";
@@ -22,42 +23,60 @@ const purchaseSchema = z.object({
  * Prix lu dans le catalogue serveur selon la zone de la boutique.
  */
 export async function purchaseAddOn(storeId: string, addOnId: string, quantity = 1): Promise<ActionResult> {
+  return guard(() => purchaseAddOnFor(storeId, addOnId, quantity));
+}
+
+/**
+ * Parcours « payer d'abord » de l'assistant de nouvelle boutique : achète une place « Boutique en plus »
+ * sur la boutique principale du COMPTE (meilleur plan), dans la zone/devise de facturation de cette boutique.
+ * Après paiement confirmé, la page de facture renvoie vers l'assistant (place débloquée).
+ */
+export async function purchaseExtraStoreSlot(): Promise<ActionResult> {
   return guard(async () => {
-    const parsed = purchaseSchema.safeParse({ addOnId, quantity });
-    if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Demande invalide.");
-    const ctx = await requireStore(storeId, "billing.manage");
-    const addOn = getAddOn(parsed.data.addOnId);
-    if (!addOn) return fail("Option inconnue.");
-    // Option retirée : l'achat de domaine se fait désormais depuis Domaine (recherche, prix réel, renouvellement).
-    if (addOn.id === "DOMAIN_NAME") return fail("L'achat de nom de domaine se fait maintenant depuis la page Domaine de votre boutique.");
-    if (!addOn.plans.includes(ctx.planId)) return fail(`Cette option n'est pas disponible avec votre plan actuel.`);
-    const qty = addOn.billing === "ONE_TIME" || addOn.id === "SECTOR_TEMPLATE" ? 1 : parsed.data.quantity;
-
-    // Évite les doublons : une facture d'option en attente identique est réutilisée.
-    const pending = await db.addOnPurchase.findFirst({ where: { storeId: ctx.store.id, addOnId: addOn.id, status: "PENDING", startsAt: { lte: new Date(Date.now() + 60_000) } }, orderBy: { createdAt: "desc" } });
-    if (pending?.invoiceId) {
-      const inv = await db.invoice.findUnique({ where: { id: pending.invoiceId }, select: { status: true } });
-      if (inv?.status === "OPEN") redirect(`/app/${ctx.store.id}/abonnement/factures/${pending.invoiceId}?option=1`);
-    }
-
-    // Zone figée sur l'abonnement (source de vérité) ; la devise de la boutique n'initialise qu'un abonnement absent.
-    const initialZone = billingZone(ctx.store.subscription, ctx.store.currency);
-    const invoiceId = await db.$transaction(async (tx) => {
-      const sub = await tx.subscription.upsert({
-        where: { storeId: ctx.store.id },
-        // Jamais de plan payant créé ici : un abonnement absent démarre sur Gratuit.
-        create: { storeId: ctx.store.id, planId: "FREE", status: "ACTIVE", zone: initialZone, currency: ZONE_CURRENCY[initialZone] },
-        update: {},
-      });
-      const zone = billingZone(sub, ctx.store.currency);
-      const { invoice, purchaseId } = await createAddOnOrder(tx, { storeId: ctx.store.id, subscriptionId: sub.id, planId: sub.planId as PlanId, addOnId: addOn.id, quantity: qty, zone });
-      await audit({ storeId: ctx.store.id, actorId: ctx.user.id, action: "addon.purchased", target: purchaseId, metadata: { addOnId: addOn.id, quantity: qty, invoice: invoice.number, amount: invoice.amount, currency: invoice.currency } }, tx);
-      if (invoice.amount === 0) await confirmInvoicePayment(invoice.id, { via: "zero_amount", actorId: ctx.user.id }, tx);
-      return invoice.id;
-    });
-    revalidatePath(`/app/${ctx.store.id}/options`);
-    redirect(`/app/${ctx.store.id}/abonnement/factures/${invoiceId}?option=1`);
+    const user = await requireUserOrThrow();
+    const q = await getAccountStoresQuota(user.id);
+    if (q.firstStore || !q.primaryStoreId) return fail("Votre première boutique est incluse : créez-la directement.");
+    if (q.allowed) return fail("Vous avez déjà une place libre : créez votre boutique.");
+    if (!q.canBuyExtra) return fail("L'option « Boutique en plus » est réservée aux plans Business et Scale. Passez au plan Business pour ouvrir d'autres boutiques.");
+    return purchaseAddOnFor(q.primaryStoreId, "EXTRA_STORE", 1);
   });
+}
+
+async function purchaseAddOnFor(storeId: string, addOnId: string, quantity: number): Promise<ActionResult> {
+  const parsed = purchaseSchema.safeParse({ addOnId, quantity });
+  if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Demande invalide.");
+  const ctx = await requireStore(storeId, "billing.manage");
+  const addOn = getAddOn(parsed.data.addOnId);
+  if (!addOn) return fail("Option inconnue.");
+  // Option retirée : l'achat de domaine se fait désormais depuis Domaine (recherche, prix réel, renouvellement).
+  if (addOn.id === "DOMAIN_NAME") return fail("L'achat de nom de domaine se fait maintenant depuis la page Domaine de votre boutique.");
+  if (!addOn.plans.includes(ctx.planId)) return fail(`Cette option n'est pas disponible avec votre plan actuel.`);
+  const qty = addOn.billing === "ONE_TIME" || addOn.id === "SECTOR_TEMPLATE" ? 1 : parsed.data.quantity;
+
+  // Évite les doublons : une facture d'option en attente identique est réutilisée.
+  const pending = await db.addOnPurchase.findFirst({ where: { storeId: ctx.store.id, addOnId: addOn.id, status: "PENDING", startsAt: { lte: new Date(Date.now() + 60_000) } }, orderBy: { createdAt: "desc" } });
+  if (pending?.invoiceId) {
+    const inv = await db.invoice.findUnique({ where: { id: pending.invoiceId }, select: { status: true } });
+    if (inv?.status === "OPEN") redirect(`/app/${ctx.store.id}/abonnement/factures/${pending.invoiceId}?option=1`);
+  }
+
+  // Zone figée sur l'abonnement (source de vérité) ; la devise de la boutique n'initialise qu'un abonnement absent.
+  const initialZone = billingZone(ctx.store.subscription, ctx.store.currency);
+  const invoiceId = await db.$transaction(async (tx) => {
+    const sub = await tx.subscription.upsert({
+      where: { storeId: ctx.store.id },
+      // Jamais de plan payant créé ici : un abonnement absent démarre sur Gratuit.
+      create: { storeId: ctx.store.id, planId: "FREE", status: "ACTIVE", zone: initialZone, currency: ZONE_CURRENCY[initialZone] },
+      update: {},
+    });
+    const zone = billingZone(sub, ctx.store.currency);
+    const { invoice, purchaseId } = await createAddOnOrder(tx, { storeId: ctx.store.id, subscriptionId: sub.id, planId: sub.planId as PlanId, addOnId: addOn.id, quantity: qty, zone });
+    await audit({ storeId: ctx.store.id, actorId: ctx.user.id, action: "addon.purchased", target: purchaseId, metadata: { addOnId: addOn.id, quantity: qty, invoice: invoice.number, amount: invoice.amount, currency: invoice.currency } }, tx);
+    if (invoice.amount === 0) await confirmInvoicePayment(invoice.id, { via: "zero_amount", actorId: ctx.user.id }, tx);
+    return invoice.id;
+  });
+  revalidatePath(`/app/${ctx.store.id}/options`);
+  redirect(`/app/${ctx.store.id}/abonnement/factures/${invoiceId}?option=1`);
 }
 
 /**

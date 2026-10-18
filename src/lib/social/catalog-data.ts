@@ -34,3 +34,18 @@ export async function loadCatalogSource(storeId: string, client: Tx | typeof db 
     categories: new Map(categories.map((c) => [c.id, c.name])),
   };
 }
+
+/**
+ * Adresse publique de la boutique pour les liens produits des catalogues : domaine personnalisé VÉRIFIÉ (principal
+ * d'abord, comme la page « Partager »), sinon `${baseUrl}/s/{slug}`. Le protocole suit celui de l'application.
+ * Meta (vente) et Google Merchant Center demandent des liens sur un domaine revendiqué par le marchand.
+ */
+export async function loadStoreUrl(store: { id: string; slug: string }, baseUrl: string, client: Tx | typeof db = db): Promise<string> {
+  const domain = await client.domain.findFirst({
+    where: { storeId: store.id, verified: true },
+    orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+    select: { hostname: true },
+  });
+  if (domain && /^[a-z0-9.-]{1,253}$/.test(domain.hostname)) return `${baseUrl.startsWith("https://") ? "https" : "http"}://${domain.hostname}`;
+  return `${baseUrl}/s/${encodeURIComponent(store.slug)}`;
+}

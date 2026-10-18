@@ -1,10 +1,15 @@
-import { formatFeedPrice, META_AVAILABILITY, cleanText, type AvailabilityState, type CatalogItem } from "./feed-items";
+import {
+  formatFeedPrice, cleanText, GOOGLE_AVAILABILITY, META_AVAILABILITY, TIKTOK_AVAILABILITY, type CatalogItem,
+} from "./feed-items";
 
 /**
  * Rendu des flux publics (module PUR, testé dans tests/social-feeds.test.ts) :
- *  - Meta (Commerce Manager, catalogue WhatsApp) : RSS 2.0 avec l'espace de noms `g:` ;
- *  - Google Merchant Center : RSS 2.0 `g:` (disponibilité avec « _ », identifier_exists) ;
+ *  - Meta (Commerce Manager : Facebook, Instagram Shopping, catalogue WhatsApp) : RSS 2.0 avec l'espace de noms `g:`,
+ *    un champ par ligne (recommandation Meta : 5 Mo maximum par ligne) ;
+ *  - Google Merchant Center (Google Shopping, annonces YouTube) : RSS 2.0 `g:` (disponibilité avec « _ »,
+ *    identifier_exists) ;
  *  - TikTok Catalog : CSV (virgule, UTF-8), cellules neutralisées contre l'injection de formules.
+ * Meta et TikTok n'acceptent que des images JPEG/PNG : ils reçoivent les URL « compat » (conversion à la volée).
  */
 
 export type FeedFormat = "meta" | "google" | "tiktok";
@@ -21,30 +26,33 @@ function tag(name: string, value: string | null | undefined): string {
   return `<g:${name}>${xmlEscape(cleanText(value, 10_000))}</g:${name}>`;
 }
 
-const GOOGLE_AVAILABILITY: Record<AvailabilityState, string> = { in_stock: "in_stock", out_of_stock: "out_of_stock", preorder: "preorder" };
-
 function rssItem(item: CatalogItem, format: "meta" | "google"): string {
+  const google = format === "google";
+  const image = google ? item.imageLink : item.compatImageLink;
+  const extra = google ? item.additionalImageLinks : item.compatAdditionalImageLinks;
   const parts = [
     tag("id", item.id),
     tag("title", item.title),
     tag("description", item.description),
     tag("link", item.link),
-    tag("image_link", item.imageLink),
-    ...item.additionalImageLinks.map((u) => tag("additional_image_link", u)),
+    tag("image_link", image),
+    ...extra.map((u) => tag("additional_image_link", u)),
     tag("brand", item.brand),
     tag("condition", item.condition),
-    tag("availability", format === "google" ? GOOGLE_AVAILABILITY[item.availability] : META_AVAILABILITY[item.availability]),
+    tag("availability", google ? GOOGLE_AVAILABILITY[item.availability] : META_AVAILABILITY[item.availability]),
     tag("price", formatFeedPrice(item.price, item.currency)),
     item.salePrice != null ? tag("sale_price", formatFeedPrice(item.salePrice, item.currency)) : "",
     tag("sale_price_effective_date", item.salePriceEffectiveDate),
     tag("item_group_id", item.itemGroupId),
     tag("gtin", item.gtin),
-    format === "google" && !item.gtin ? tag("identifier_exists", "no") : "",
+    // Google : sans GTIN ni MPN, l'article doit déclarer l'absence d'identifiant (sinon refus « Missing GTIN »).
+    google && !item.gtin ? tag("identifier_exists", "no") : "",
     tag("color", item.color),
     tag("size", item.size),
     tag("product_type", item.productType),
+    tag("google_product_category", item.googleProductCategory),
   ].filter(Boolean);
-  return `<item>${parts.join("")}</item>`;
+  return `<item>\n${parts.join("\n")}\n</item>`;
 }
 
 /** Flux RSS 2.0 (Meta ou Google). */
@@ -72,8 +80,8 @@ export function csvCell(value: string | number | null | undefined): string {
 }
 
 export const TIKTOK_COLUMNS = [
-  "sku_id", "title", "description", "availability", "condition", "price", "sale_price", "link", "image_link",
-  "additional_image_link", "brand", "gtin", "item_group_id", "color", "size", "product_type",
+  "sku_id", "title", "description", "availability", "condition", "price", "sale_price", "sale_price_effective_date", "link", "image_link",
+  "additional_image_link", "brand", "gtin", "item_group_id", "color", "size", "product_type", "google_product_category",
 ] as const;
 
 /** Flux CSV TikTok Catalog (une ligne d'en-têtes puis une ligne par article). */
@@ -82,19 +90,22 @@ export function renderTiktokCsv(items: CatalogItem[]): string {
     i.id,
     i.title,
     i.description,
-    META_AVAILABILITY[i.availability],
+    TIKTOK_AVAILABILITY[i.availability],
     i.condition,
     formatFeedPrice(i.price, i.currency),
     i.salePrice != null ? formatFeedPrice(i.salePrice, i.currency) : "",
+    i.salePriceEffectiveDate ?? "",
     i.link,
-    i.imageLink,
-    i.additionalImageLinks.map((u) => u.replace(/,/g, "%2C")).join(","),
+    i.compatImageLink,
+    // TikTok : jusqu'à 10 URL séparées par des virgules, dans une cellule entre guillemets (csvCell s'en charge).
+    i.compatAdditionalImageLinks.map((u) => u.replace(/,/g, "%2C")).join(","),
     i.brand,
     i.gtin ?? "",
     i.itemGroupId ?? "",
     i.color ?? "",
     i.size ?? "",
     i.productType ?? "",
+    i.googleProductCategory ?? "",
   ]);
   return [TIKTOK_COLUMNS.join(","), ...rows.map((r) => r.map(csvCell).join(","))].join("\r\n") + "\r\n";
 }

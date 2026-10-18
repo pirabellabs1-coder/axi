@@ -103,8 +103,16 @@ describe("actions du catalogue", () => {
     expect(r.ok).toBe(true);
     const mine = rows().filter((x) => x.storeId === "store_aaa");
     expect(mine.map((x) => x.channel).sort()).toEqual(["google", "meta", "tiktok", "whatsapp"]);
-    for (const x of mine) expect(x.settings).toEqual({ includeOutOfStock: false, brand: "Ma marque" });
+    for (const x of mine) expect(x.settings).toEqual({ includeOutOfStock: false, brand: "Ma marque", googleProductCategory: null });
     expect(rows().find((x) => x.id === "sync_bbb_meta").settings).toBeUndefined();
+  });
+
+  it("options : catégorie Google validée (numéro ou chemin de taxonomie)", async () => {
+    const ok = await saveCatalogOptions(undefined, form({ storeId: "store_aaa", brand: "", includeOutOfStock: "on", googleProductCategory: "Apparel & Accessories > Clothing" }));
+    expect(ok.ok).toBe(true);
+    expect(rows().find((x) => x.storeId === "store_aaa" && x.channel === "google").settings.googleProductCategory).toBe("Apparel & Accessories > Clothing");
+    const bad = await saveCatalogOptions(undefined, form({ storeId: "store_aaa", brand: "", includeOutOfStock: "on", googleProductCategory: "<img src=x>" }));
+    expect(bad.ok).toBe(false);
   });
 
   it("synchroniser maintenant : job forcé de la boutique", async () => {

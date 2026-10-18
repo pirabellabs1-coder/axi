@@ -61,7 +61,12 @@ export type LazyJobType =
   // Domaines achetés via Axi (src/lib/domains/jobs.ts) : achat / renouvellement après facture payée, suivi d'opération
   | "domain.register"
   | "domain.renew"
-  | "domain.poll";
+  | "domain.poll"
+  // TikTok Shop (src/lib/tiktok-shop/jobs.ts) : balayage 10 min, synchro d'une boutique, import d'une commande, publication
+  | "tiktok_shop.sweep"
+  | "tiktok_shop.sync"
+  | "tiktok_shop.order"
+  | "tiktok_shop.publish";
 
 export async function enqueue(type: JobType, payload: Record<string, unknown>, opts: { storeId?: string | null; runAt?: Date } = {}, tx: Tx | typeof db = db) {
   return tx.job.create({
@@ -102,6 +107,10 @@ const LAZY_JOB_MODULES: Record<LazyJobType, () => Promise<{ handlers: JobHandler
   "domain.register": () => import("@/lib/domains/jobs"),
   "domain.renew": () => import("@/lib/domains/jobs"),
   "domain.poll": () => import("@/lib/domains/jobs"),
+  "tiktok_shop.sweep": () => import("@/lib/tiktok-shop/jobs"),
+  "tiktok_shop.sync": () => import("@/lib/tiktok-shop/jobs"),
+  "tiktok_shop.order": () => import("@/lib/tiktok-shop/jobs"),
+  "tiktok_shop.publish": () => import("@/lib/tiktok-shop/jobs"),
 };
 
 /** Gestionnaire paresseux : un type déclaré sans implémentation échoue (retenté puis DEAD), jamais marqué DONE à tort. */
@@ -231,6 +240,10 @@ const handlers: Record<JobType, Handler> = {
   "domain.register": lazyHandler("domain.register"),
   "domain.renew": lazyHandler("domain.renew"),
   "domain.poll": lazyHandler("domain.poll"),
+  "tiktok_shop.sweep": lazyHandler("tiktok_shop.sweep"),
+  "tiktok_shop.sync": lazyHandler("tiktok_shop.sync"),
+  "tiktok_shop.order": lazyHandler("tiktok_shop.order"),
+  "tiktok_shop.publish": lazyHandler("tiktok_shop.publish"),
   "cart.check": async (p) => {
     const { checkAbandonedCart } = await import("@/lib/carts/service");
     await checkAbandonedCart(p);

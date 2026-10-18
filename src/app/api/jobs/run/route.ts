@@ -73,6 +73,18 @@ async function handle(req: NextRequest) {
     } catch (e) {
       console.error("[jobs/run] operations schedule", e);
     }
+    // TikTok Shop : synchronisation des boutiques connectées toutes les 10 minutes (sans effet si non configuré).
+    try {
+      await (await import("@/lib/tiktok-shop/jobs")).scheduleTiktokShopSweep();
+    } catch (e) {
+      console.error("[jobs/run] tiktok shop", e);
+    }
+    // Commenter pour acheter (lives) : expiration des réservations non payées, passage en payé.
+    try {
+      await (await import("@/lib/live/claims")).sweepLiveClaims({ limit: 200 });
+    } catch (e) {
+      console.error("[jobs/run] live claims", e);
+    }
     const jobs = await runJobs(50);
     let reconciliation: { checked: number; updated: number } | { error: string };
     try {
@@ -138,7 +150,15 @@ async function handle(req: NextRequest) {
           providerEventsPurge: await step(() => purgeProviderEvents()),
           // Lot 3 : jetons de la page livreur des expéditions clôturées depuis plus de 24 h
           courierTokensPurge: await step(async () => (await import("@/lib/shipping/token-purge")).purgeFinishedCourierTokens()),
-          catalogSync: await step(async () => (await import("@/lib/social/sync")).scheduleDueCatalogSyncs()), // lot 1 bis (P2) : catalogue WhatsApp
+          catalogSync: await step(async () => (await import("@/lib/social/sync")).scheduleDueCatalogSyncs()),
+          // Quota de boutiques au niveau du compte : boutiques au-delà de la limite (option résiliée échue) → brouillon.
+          accountStoreLimits: await step(async () => {
+            const owners = await db.membership.groupBy({ by: ["userId"], where: { role: "OWNER", store: { status: { not: "ARCHIVED" } } }, _count: { storeId: true }, having: { storeId: { _count: { gt: 1 } } } });
+            const { enforceAccountStoreLimit } = await import("@/lib/store/account-quota-service");
+            let unpublished = 0;
+            for (const o of owners) unpublished += (await enforceAccountStoreLimit(o.userId)).length;
+            return { owners: owners.length, unpublished };
+          }), // lot 1 bis (P2) : catalogue WhatsApp
         };
       }
     } catch (e) {

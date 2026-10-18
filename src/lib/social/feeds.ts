@@ -5,7 +5,7 @@ import { effectivePlanId } from "@/lib/billing/rules";
 import { clientIp, rateLimitAll } from "@/lib/rate-limit";
 import { buildCatalogItems, readSettings } from "./feed-items";
 import { FEED_CONTENT_TYPE, renderFeed, type FeedFormat } from "./feed-format";
-import { loadCatalogSource } from "./catalog-data";
+import { loadCatalogSource, loadStoreUrl } from "./catalog-data";
 import { appBaseUrl } from "./sync";
 
 /**
@@ -68,9 +68,9 @@ export async function serveFeed(slug: string, format: FeedFormat): Promise<Respo
   let body = cacheGet(key, now);
   if (body == null) {
     const base = appBaseUrl();
-    const source = await loadCatalogSource(store.id);
-    const { items } = buildCatalogItems({ store, products: source.products, categories: source.categories, settings: readSettings(row.settings), baseUrl: base, now: new Date(now) });
-    body = renderFeed(format, { title: store.name, link: `${base}/s/${store.slug}`, description: store.tagline || store.description || store.name }, items);
+    const [source, storeUrl] = await Promise.all([loadCatalogSource(store.id), loadStoreUrl(store, base)]);
+    const { items } = buildCatalogItems({ store, products: source.products, categories: source.categories, settings: readSettings(row.settings), baseUrl: base, storeUrl, now: new Date(now) });
+    body = renderFeed(format, { title: store.name, link: storeUrl, description: store.tagline || store.description || store.name }, items);
     cacheSet(key, body, now);
   }
   return new Response(body, {

@@ -4,13 +4,14 @@ import { enqueue } from "@/lib/jobs";
 import { decryptSecret } from "@/lib/crypto";
 import { PLANS } from "@/config/plans";
 import { effectivePlanId } from "@/lib/billing/rules";
-import { buildCatalogItems, readSettings } from "./feed-items";
-import { loadCatalogSource } from "./catalog-data";
+import { buildCatalogItems, readSettings, type CatalogSettings } from "./feed-items";
+import { loadCatalogSource, loadStoreUrl } from "./catalog-data";
 import {
-  SYNC_INTERVAL_MS, SYNC_LEASE_MS, SYNC_STALE_MS, backoffDelayMs, buildBatchRequests, desiredFromItems, diffCatalog, failedBatch, mapBatchResponse, sanitizeError,
+  SYNC_INTERVAL_MS, SYNC_LEASE_MS, SYNC_STALE_MS, backoffDelayMs, buildBatchRequests, desiredFromItems, diffCatalog, failedBatch, interpretBatchStatus,
+  mapBatchResponse, readStatusCheck, sanitizeError, statusCheckDelayMs,
   type DesiredItem, type ItemOutcome,
 } from "./meta-batch";
-import { dryRunCatalogApi, graphCatalogApi, isConfigurationError, isDryRun, type CatalogApi } from "./graph-client";
+import { dryRunCatalogApi, graphCatalogApi, isConfigurationError, isDryRun, isRateLimitError, type CatalogApi } from "./graph-client";
 
 /**
  * Synchronisation API du catalogue WhatsApp Business / Meta Commerce (SocialCatalogSync channel « whatsapp »).
@@ -30,7 +31,8 @@ export type FeedChannel = (typeof FEED_CHANNELS)[number];
 
 type Graph = { token: string; phoneNumberId: string | null };
 
-async function whatsappGraph(storeId: string): Promise<Graph | { error: string }> {
+/** Jeton Graph de la boutique (intégration whatsapp_cloud chiffrée) ; jamais renvoyé au client ni journalisé. */
+export async function whatsappGraph(storeId: string): Promise<Graph | { error: string }> {
   const i = await db.integration.findUnique({ where: { storeId_kind: { storeId, kind: "whatsapp_cloud" } }, select: { status: true, phoneNumberId: true, secretsEncrypted: true } });
   if (!i || !i.secretsEncrypted) return { error: "Connectez d'abord l'API WhatsApp officielle (page WhatsApp)." };
   if (i.status !== "active") return { error: "La connexion WhatsApp Cloud n'est pas encore validée par la plateforme." };
@@ -93,8 +95,9 @@ export async function runCatalogSync(syncId: string, opts: { force?: boolean; jo
   }
 
   try {
-    const source = await loadCatalogSource(store.id);
-    const built = buildCatalogItems({ store, products: source.products, categories: source.categories, settings: readSettings(sync.settings), baseUrl: appBaseUrl(), now });
+    const base = appBaseUrl();
+    const [source, storeUrl] = await Promise.all([loadCatalogSource(store.id), loadStoreUrl(store, base)]);
+    const built = buildCatalogItems({ store, products: source.products, categories: source.categories, settings: readSettings(sync.settings), baseUrl: base, storeUrl, now });
     const desired = desiredFromItems(built.items);
     const existing = await db.socialCatalogItem.findMany({
       where: { syncId: sync.id, storeId: store.id },
@@ -104,6 +107,7 @@ export async function runCatalogSync(syncId: string, opts: { force?: boolean; jo
     const batches = buildBatchRequests(diff);
 
     const outcomes: ItemOutcome[] = [];
+    const handles: string[] = [];
     let fatal: unknown = null;
     for (const requests of batches) {
       if (fatal) {
@@ -111,7 +115,9 @@ export async function runCatalogSync(syncId: string, opts: { force?: boolean; jo
         continue;
       }
       try {
-        outcomes.push(...mapBatchResponse(requests, await api.itemsBatch(sync.externalCatalogId, requests)));
+        const response = await api.itemsBatch(sync.externalCatalogId, requests);
+        for (const h of response.handles ?? []) if (typeof h === "string" && h) handles.push(h);
+        outcomes.push(...mapBatchResponse(requests, response));
       } catch (e) {
         fatal = e;
         outcomes.push(...failedBatch(requests, sanitizeError((e as Error).message, 300, [token])));
@@ -119,6 +125,8 @@ export async function runCatalogSync(syncId: string, opts: { force?: boolean; jo
     }
 
     await applyOutcomes(sync.id, store.id, outcomes, new Map(diff.upserts.map((d) => [d.retailerId, d])), existing, now);
+    // Le traitement Meta est asynchrone : les refus tardifs sont relevés par check_batch_request_status.
+    if (handles.length) await scheduleStatusCheck(sync.id, store.id, { handles, sentAt: now.toISOString(), attempt: 0 }, now);
     const failed = outcomes.filter((o) => !o.ok).length;
     // Refus encore actifs : ceux de ce passage et ceux, inchangés, d'un passage précédent (non renvoyés).
     const refused = failed + diff.blocked;
@@ -130,7 +138,11 @@ export async function runCatalogSync(syncId: string, opts: { force?: boolean; jo
         where: { id: sync.id, storeId: store.id },
         data: {
           status: "error",
-          lastError: isConfigurationError(fatal) ? `${message} (vérifiez le jeton, sa permission catalog_management et l'identifiant du catalogue)` : message,
+          lastError: isConfigurationError(fatal)
+            ? `${message} (vérifiez le jeton, sa permission catalog_management et l'identifiant du catalogue)`
+            : isRateLimitError(fatal)
+              ? `${message} (quota d'appels Meta atteint : nouvelle tentative automatique)`
+              : message,
           lastSyncAt: now,
           consecutiveFailures: failures,
           nextSyncAt: new Date(now.getTime() + backoffDelayMs(failures)),
@@ -170,6 +182,82 @@ export async function runCatalogSync(syncId: string, opts: { force?: boolean; jo
       .catch(() => {});
     throw new Error(sanitizeError((e as Error).message, 500, [token]));
   }
+}
+
+async function scheduleStatusCheck(syncId: string, storeId: string, check: { handles: string[]; sentAt: string; attempt: number }, now: Date) {
+  const delay = statusCheckDelayMs(check.attempt);
+  if (delay == null) return;
+  await enqueue("social.sync", { syncId, check }, { storeId, runAt: new Date(now.getTime() + delay) });
+}
+
+export type StatusCheckResult = { ok: true; state: "pending" | "finished" | "failed"; invalid: number } | { ok: false; reason: string };
+
+/**
+ * Suivi du traitement asynchrone d'un envoi (job `social.sync` avec `check`) :
+ *  - lot terminé : les requêtes invalides (non enregistrées par Meta) passent en erreur avec le message Meta ;
+ *  - lot annulé ou en erreur côté Meta : les articles envoyés à ce passage repassent « en attente » et une
+ *    synchronisation est replanifiée (ils seront renvoyés) ;
+ *  - encore en cours : nouvelle vérification plus tard (1, 2, 5, 15, 30, 60 min), puis abandon (les erreurs restent
+ *    visibles dans Commerce Manager).
+ * Un échec d'appel (réseau, quota) reporte la vérification ; il ne touche jamais l'état de la synchronisation.
+ */
+export async function runBatchStatusCheck(syncId: string, rawCheck: unknown, opts: { jobStoreId?: string | null; api?: CatalogApi; now?: Date } = {}): Promise<StatusCheckResult> {
+  const now = opts.now ?? new Date();
+  const check = readStatusCheck(rawCheck);
+  if (!check) return { ok: false, reason: "Suivi invalide" };
+  const sync = await db.socialCatalogSync.findUnique({ where: { id: syncId }, select: { id: true, storeId: true, channel: true, enabled: true, externalCatalogId: true } });
+  if (!sync || sync.channel !== SYNC_CHANNEL || !sync.externalCatalogId) return { ok: false, reason: "Synchronisation introuvable" };
+  if (opts.jobStoreId && opts.jobStoreId !== sync.storeId) return { ok: false, reason: "Boutique du job incohérente" };
+  if (!sync.enabled) return { ok: false, reason: "Synchronisation désactivée" };
+
+  let api = opts.api;
+  let token: string | null = null;
+  if (!api) {
+    if (isDryRun()) api = dryRunCatalogApi;
+    else {
+      const graph = await whatsappGraph(sync.storeId);
+      if ("error" in graph) return { ok: false, reason: graph.error };
+      token = graph.token;
+      api = graphCatalogApi(graph.token);
+    }
+  }
+
+  const pending: string[] = [];
+  let invalidCount = 0;
+  let failed = false;
+  for (const handle of check.handles) {
+    let outcome;
+    try {
+      outcome = interpretBatchStatus(await api.checkBatchStatus(sync.externalCatalogId, handle));
+    } catch (e) {
+      console.warn(`[social.sync] suivi ${sync.id} reporté : ${sanitizeError((e as Error).message, 200, [token])}`);
+      pending.push(handle);
+      continue;
+    }
+    if (outcome.state === "pending") pending.push(handle);
+    else if (outcome.state === "failed") failed = true;
+    else {
+      for (const inv of outcome.invalid) {
+        const r = await db.socialCatalogItem.updateMany({ where: { syncId: sync.id, storeId: sync.storeId, retailerId: inv.retailerId }, data: { status: "error", lastError: inv.error } });
+        invalidCount += r.count;
+      }
+    }
+  }
+
+  if (failed) {
+    // Articles de ce passage remis en attente : renvoyés à la prochaine synchronisation, planifiée tout de suite.
+    await db.socialCatalogItem.updateMany({ where: { syncId: sync.id, storeId: sync.storeId, status: "synced", syncedAt: new Date(check.sentAt) }, data: { status: "pending" } });
+    await db.socialCatalogSync.updateMany({ where: { id: sync.id, storeId: sync.storeId, status: { not: "syncing" } }, data: { nextSyncAt: now } });
+  }
+  if (invalidCount > 0) {
+    const refused = await db.socialCatalogItem.count({ where: { syncId: sync.id, storeId: sync.storeId, status: "error" } });
+    await db.socialCatalogSync.updateMany({
+      where: { id: sync.id, storeId: sync.storeId, status: { not: "syncing" } },
+      data: { status: "error", lastError: `${refused} article${refused > 1 ? "s" : ""} refusé${refused > 1 ? "s" : ""} par Meta (détail par article ci-dessous).` },
+    });
+  }
+  if (pending.length) await scheduleStatusCheck(sync.id, sync.storeId, { handles: pending, sentAt: check.sentAt, attempt: check.attempt + 1 }, now);
+  return { ok: true, state: failed ? "failed" : pending.length ? "pending" : "finished", invalid: invalidCount };
 }
 
 /** Écrit l'état par article : synchronisé, refusé (message Meta), ou supprimé (ligne retirée). */
@@ -251,7 +339,7 @@ export type CatalogStatus = {
   };
   items: { synced: number; error: number; pending: number };
   errors: { retailerId: string; productId: string; variantId: string | null; error: string | null; updatedAt: Date }[];
-  settings: { includeOutOfStock: boolean; brand: string | null };
+  settings: CatalogSettings;
 };
 
 export function feedUrl(slug: string, channel: FeedChannel): string {

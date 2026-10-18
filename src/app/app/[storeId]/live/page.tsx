@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Radio } from "lucide-react";
 import { getStoreContext } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
@@ -11,6 +12,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { PlanGate } from "@/components/app/plan-gate";
 import { LiveEventForm, LiveEventRow } from "./live-forms";
+import { SocialAccountsCard } from "./social-accounts";
 
 export const metadata: Metadata = { title: "Direct (live shopping)" };
 
@@ -66,6 +68,7 @@ export default async function LivePage({ params }: { params: Promise<{ storeId: 
         </Card>
 
         <div className="space-y-6">
+          <SocialAccountsCard storeId={store.id} canManage={ctx.can("integrations.manage")} />
           <Card>
             <CardHeader title="À venir et en cours" />
             <CardBody>
@@ -101,6 +104,9 @@ export default async function LivePage({ params }: { params: Promise<{ storeId: 
                       <span className="flex items-center gap-3 text-ink-muted">
                         {formatDateTime(e.startsAt)}
                         <Badge tone="neutral">{LABEL.ended}</Badge>
+                        <Link href={`/app/${store.id}/live/${e.id}`} className="inline-flex min-h-11 items-center font-medium text-primary hover:underline">
+                          Réservations
+                        </Link>
                       </span>
                     </li>
                   ))}

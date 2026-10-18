@@ -39,9 +39,17 @@ const TURNSTILE_ORIGIN =
  * Rebâtir après avoir défini NEXT_PUBLIC_META_APP_ID / NEXT_PUBLIC_META_ESIGNUP_CONFIG_ID.
  */
 const META_ESIGNUP_ORIGIN =
-  process.env.NEXT_PUBLIC_META_APP_ID?.trim() && process.env.NEXT_PUBLIC_META_ESIGNUP_CONFIG_ID?.trim()
+  process.env.NEXT_PUBLIC_META_APP_ID?.trim() && (process.env.NEXT_PUBLIC_META_ESIGNUP_CONFIG_ID?.trim() || process.env.NEXT_PUBLIC_META_SOCIAL_CONFIG_ID?.trim())
     ? " https://www.facebook.com https://web.facebook.com https://staticxx.facebook.com"
     : "";
+/**
+ * Lecteurs de la section « Direct » de la boutique (src/lib/social/live-embed.ts, LIVE_PLAYER_ORIGINS : liste tenue
+ * identique, vérifiée par tests/social-live-embed.test.ts). Seules ces origines d'iframe sont ajoutées ; le lecteur
+ * n'est chargé qu'au clic du visiteur.
+ */
+const LIVE_PLAYER_ORIGINS = "https://www.youtube-nocookie.com https://www.youtube.com https://www.facebook.com https://www.tiktok.com https://www.instagram.com";
+/** Sources d'iframe dédoublonnées (l'Embedded Signup ajoute aussi www.facebook.com). */
+const frameSources = (...lists: string[]) => [...new Set(lists.join(" ").split(/\s+/).filter(Boolean))].join(" ");
 const cspDirectives = (frameSrc: string) => [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isProd ? "" : " 'unsafe-eval'"} ${PIXEL_SCRIPTS}${TURNSTILE_ORIGIN}`,
@@ -55,7 +63,7 @@ const cspDirectives = (frameSrc: string) => [
   "base-uri 'self'",
   ...(isProd ? ["upgrade-insecure-requests"] : []),
 ].join("; ");
-const csp = cspDirectives(`'self'${TURNSTILE_ORIGIN}${META_ESIGNUP_ORIGIN}`);
+const csp = cspDirectives(frameSources("'self'", TURNSTILE_ORIGIN, META_ESIGNUP_ORIGIN, LIVE_PLAYER_ORIGINS));
 /**
  * Applications embarquées de l'App Store (src/app/app/[storeId]/applications/[slug]/ouvrir) : SEULE route où une
  * iframe externe est permise (https ; http://localhost en dev pour la recette). L'URL de l'iframe est fixée par le

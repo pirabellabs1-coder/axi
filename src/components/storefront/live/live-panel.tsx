@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import { countdownLabel, countdownParts, type LiveStatus } from "@/lib/live/stream";
 import { requestLiveReminder } from "@/lib/live/actions";
 import { ProductImage } from "../product-image";
+import { LiveAddButton, LivePlayer, useLiveCart } from "../sections/live-player";
+import { PLATFORM_LABELS } from "@/lib/social/live-embed";
 
 /**
  * Panneau du direct (lot 4 §18, équipe CAN).
@@ -16,7 +18,10 @@ import { ProductImage } from "../product-image";
  *  - produits épinglés rafraîchis toutes les 15 s par `/api/live/{slug}`, uniquement quand la section est
  *    visible ET l'onglet au premier plan (aucune requête inutile sur un réseau lent) ;
  *  - « Me rappeler sur WhatsApp » : numéro + case de consentement explicite, action serveur ;
- *  - aucun lecteur tiers intégré (politique de sécurité) : le direct s'ouvre dans un nouvel onglet.
+ *  - lecteur officiel de la plateforme intégré pendant le direct (YouTube, Facebook ; vidéos TikTok / Instagram),
+ *    chargé seulement au clic (sections/live-player.tsx, origines limitées dans frame-src) ; lien « nouvel onglet »
+ *    toujours proposé (directs TikTok et Instagram non intégrables) ;
+ *  - « Ajouter » au panier sans quitter le direct pour les produits simples (sinon lien vers la fiche).
  */
 
 export type LivePanelEvent = {
@@ -37,7 +42,9 @@ const POLL_MS = 15_000;
  * base, pour rester rendue à l'identique dans l'aperçu de l'éditeur).
  * États explicites : chargement (squelette), aucun direct (rien, ou une note dans l'aperçu), direct affiché.
  */
-export function LiveLoader({ slug, base, showReminder, hideWhenNone, preview, note }: { slug: string; base: string; showReminder: boolean; hideWhenNone: boolean; preview: boolean; note: string }) {
+export function LiveLoader({
+  slug, base, showReminder, hideWhenNone, preview, note, showPlayer = true,
+}: { slug: string; base: string; showReminder: boolean; hideWhenNone: boolean; preview: boolean; note: string; showPlayer?: boolean }) {
   const [state, setState] = useState<{ phase: "loading" | "ready"; event: LivePanelEvent | null }>({ phase: "loading", event: null });
   const host = useRef<HTMLDivElement>(null);
 
@@ -87,12 +94,12 @@ export function LiveLoader({ slug, base, showReminder, hideWhenNone, preview, no
   }
   return (
     <div ref={host}>
-      <LivePanel slug={slug} base={base} initial={state.event} showReminder={showReminder} />
+      <LivePanel slug={slug} base={base} initial={state.event} showReminder={showReminder} showPlayer={showPlayer && !preview} />
     </div>
   );
 }
 
-function LivePanel({ slug, base, initial, showReminder }: { slug: string; base: string; initial: LivePanelEvent; showReminder: boolean }) {
+function LivePanel({ slug, base, initial, showReminder, showPlayer }: { slug: string; base: string; initial: LivePanelEvent; showReminder: boolean; showPlayer: boolean }) {
   const [event, setEvent] = useState(initial);
   const [now, setNow] = useState(() => Date.now());
   const box = useRef<HTMLDivElement>(null);
@@ -138,6 +145,8 @@ function LivePanel({ slug, base, initial, showReminder }: { slug: string; base: 
   const parts = countdownParts(event.startsAt, now);
   const live = event.status === "live";
   const pinned = event.products.find((p) => p.pinned) ?? null;
+  const cart = useLiveCart(slug, event.products.map((p) => p.id));
+  const platformLabel = PLATFORM_LABELS[event.platform] ?? event.platform;
 
   return (
     <div ref={box} className="grid grid-cols-1 gap-6 md:grid-cols-[1.1fr_1fr] md:items-start md:gap-10">
@@ -154,6 +163,7 @@ function LivePanel({ slug, base, initial, showReminder }: { slug: string; base: 
           )}
         </p>
         <h3 className="mt-3 text-lg font-semibold text-ink">{event.title}</h3>
+        {showPlayer && live && event.streamUrl && <LivePlayer streamUrl={event.streamUrl} title={event.title} />}
 
         {!live && (
           <>
@@ -187,7 +197,7 @@ function LivePanel({ slug, base, initial, showReminder }: { slug: string; base: 
             )}
           >
             <ExternalLink className="size-4" aria-hidden />
-            {live ? `Regarder sur ${event.platform}` : `Voir la page ${event.platform}`}
+            {live ? `Ouvrir sur ${platformLabel}` : `Voir la page ${platformLabel}`}
             <span className="sr-only"> (nouvel onglet)</span>
           </a>
         </div>
@@ -201,13 +211,15 @@ function LivePanel({ slug, base, initial, showReminder }: { slug: string; base: 
           <p className="rounded-[18px] bg-surface p-4 text-sm text-ink-muted ring-1 ring-line">Les produits seront annoncés pendant le direct.</p>
         ) : (
           <ul className="space-y-3">
-            {event.products.map((p) => (
+            {event.products.map((p) => {
+              const info = cart.get(p.id);
+              return (
               <li
                 key={p.id}
                 aria-current={p.pinned ? "true" : undefined}
-                className={cn("rounded-[min(var(--store-card-radius),18px)] bg-surface p-3 ring-1", p.pinned ? "ring-2 ring-[var(--store-primary)]" : "ring-line")}
+                className={cn("flex items-center gap-3 rounded-[min(var(--store-card-radius),18px)] bg-surface p-3 ring-1", p.pinned ? "ring-2 ring-[var(--store-primary)]" : "ring-line")}
               >
-                <Link href={`${base}/p/${p.slug}`} className="group flex items-center gap-3">
+                <Link href={`${base}/p/${p.slug}`} className="group flex min-w-0 flex-1 items-center gap-3">
                   <ProductImage src={p.image ?? undefined} alt="" ratio="aspect-square" className="w-16 shrink-0 rounded-[12px]" sizes="64px" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium text-ink group-hover:underline group-hover:underline-offset-4">{p.name}</span>
@@ -218,8 +230,10 @@ function LivePanel({ slug, base, initial, showReminder }: { slug: string; base: 
                     </span>
                   </span>
                 </Link>
+                {info?.quickAdd && !p.soldOut && <LiveAddButton slug={slug} info={info} />}
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
         {pinned && <p className="sr-only" role="status" aria-live="polite">{`Produit présenté : ${pinned.name}`}</p>}

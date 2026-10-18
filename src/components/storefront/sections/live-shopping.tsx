@@ -21,6 +21,7 @@ export default function LiveShopping({ section, ctx }: SectionProps) {
         base={ctx.base}
         showReminder={S.bool(st, "show_reminder", true) && !!ctx.data.store.whatsappNumber}
         hideWhenNone={S.bool(st, "hide_when_none", true)}
+        showPlayer={S.bool(st, "show_player", true)}
         preview={ctx.preview}
         note={text}
       />

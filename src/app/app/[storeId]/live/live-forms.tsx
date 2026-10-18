@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { Pin, Play, Radio, Square, Trash2 } from "lucide-react";
+import { MessageSquareText, Pin, Play, Radio, Square, Trash2 } from "lucide-react";
+import { ButtonLink } from "@/components/ui/button";
 import type { BadgeTone } from "@/components/ui/badge";
 import { Badge } from "@/components/ui/badge";
 import { Field, Input, Textarea } from "@/components/ui/field";
@@ -145,6 +146,9 @@ export function LiveEventRow({
               <Square className="size-4" aria-hidden /> Terminer
             </ActionButton>
           )}
+          <ButtonLink href={`/app/${storeId}/live/${event.id}`} variant="secondary" size="sm" className="min-h-11">
+            <MessageSquareText className="size-4" aria-hidden /> Réservations
+          </ButtonLink>
           <button type="button" onClick={() => setEditing((v) => !v)} aria-expanded={editing} className="inline-flex min-h-11 items-center rounded-full px-3 text-sm font-medium text-ink-muted hover:text-ink">
             {editing ? "Fermer" : "Modifier"}
           </button>

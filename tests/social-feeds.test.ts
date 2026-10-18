@@ -69,13 +69,13 @@ describe("articles de catalogue", () => {
   it("réglage « exclure les ruptures »", () => {
     const p = product({ stock: 0 });
     expect(buildCatalogItems({ store, products: [p], baseUrl: BASE, now: NOW }).items).toHaveLength(1);
-    expect(buildCatalogItems({ store, products: [p], baseUrl: BASE, now: NOW, settings: { includeOutOfStock: false, brand: null } }).items).toHaveLength(0);
+    expect(buildCatalogItems({ store, products: [p], baseUrl: BASE, now: NOW, settings: { includeOutOfStock: false, brand: null, googleProductCategory: null } }).items).toHaveLength(0);
   });
 
   it("prix barré : prix comparé, promotion datée, prix de variante", () => {
     expect(itemPricing(product({ compareAtPrice: 22000 }), null, NOW)).toEqual({ price: 22000, salePrice: 18000, effective: null });
     const promo = product({ promoPrice: 15000, promoStart: new Date("2026-10-01T00:00:00Z"), promoEnd: new Date("2026-10-31T23:59:00Z") });
-    expect(itemPricing(promo, null, NOW)).toEqual({ price: 18000, salePrice: 15000, effective: "2026-10-01T00:00:00.000Z/2026-10-31T23:59:00.000Z" });
+    expect(itemPricing(promo, null, NOW)).toEqual({ price: 18000, salePrice: 15000, effective: "2026-10-01T00:00Z/2026-10-31T23:59Z" });
     expect(itemPricing(promo, null, new Date("2026-11-02T00:00:00Z")).salePrice).toBeNull();
     expect(itemPricing(promo, variant({ price: 20000, compareAtPrice: 25000 }), NOW)).toEqual({ price: 25000, salePrice: 20000, effective: null });
     expect(itemPricing(product(), variant({ price: 20000 }), NOW)).toEqual({ price: 20000, salePrice: null, effective: null });
@@ -116,9 +116,12 @@ describe("articles de catalogue", () => {
   });
 
   it("réglages en liste blanche", () => {
-    expect(readSettings({ includeOutOfStock: false, brand: "  X  ", evil: "<x>" })).toEqual({ includeOutOfStock: false, brand: "X" });
-    expect(readSettings(null)).toEqual({ includeOutOfStock: true, brand: null });
-    expect(readSettings("nope")).toEqual({ includeOutOfStock: true, brand: null });
+    expect(readSettings({ includeOutOfStock: false, brand: "  X  ", evil: "<x>" })).toEqual({ includeOutOfStock: false, brand: "X", googleProductCategory: null });
+    expect(readSettings(null)).toEqual({ includeOutOfStock: true, brand: null, googleProductCategory: null });
+    expect(readSettings("nope")).toEqual({ includeOutOfStock: true, brand: null, googleProductCategory: null });
+    expect(readSettings({ googleProductCategory: "2271" }).googleProductCategory).toBe("2271");
+    expect(readSettings({ googleProductCategory: "Apparel & Accessories > Clothing > Dresses" }).googleProductCategory).toBe("Apparel & Accessories > Clothing > Dresses");
+    expect(readSettings({ googleProductCategory: "<script>" }).googleProductCategory).toBeNull();
   });
 });
 
@@ -200,7 +203,7 @@ describe("empreinte des articles", () => {
     expect(contentHash(a)).toBe(contentHash({ ...a }));
     expect(contentHash({ ...a, price: "17000 XOF" })).not.toBe(contentHash(a));
     // Ordre des clés sans effet
-    const reversed = Object.fromEntries(Object.entries(a).reverse());
+    const reversed = Object.fromEntries(Object.entries(a).reverse()) as typeof a;
     expect(contentHash(reversed)).toBe(contentHash(a));
   });
 });

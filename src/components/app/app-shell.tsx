@@ -6,8 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, Package, ShoppingBag, Users, Ticket, Truck, MessageCircle, CreditCard, Palette, UserPlus, Receipt, Settings,
   Menu, ExternalLink, Rocket, ChevronsUpDown, Globe, Zap, Search, Filter, Megaphone, Gift, Star, Undo2, FileText, Smartphone, Coins, Languages,
-  Plus, Store as StoreIcon, Check, MoreHorizontal, Home, Sparkles, PanelLeftClose, PanelLeftOpen, X, Bell, Share2, LayoutGrid, ListTree, Boxes, Bot, WalletCards, Blocks, type LucideIcon,
-} from "lucide-react";
+  Plus, Store as StoreIcon, Check, MoreHorizontal, Home, Sparkles, PanelLeftClose, PanelLeftOpen, X, Bell, Share2, LayoutGrid, ListTree, Boxes, Bot, WalletCards, Blocks, type LucideIcon, Clapperboard } from "lucide-react";
 import { Newspaper } from "lucide-react"; // Lot 2 (équipe Blog)
 import { CalendarClock, FlaskConical } from "lucide-react"; // Lot 4 §11 et §13 (équipe EXP)
 import { Download as DownloadIcon, Radio } from "lucide-react"; // Lot 4D §14 et §18 (équipe CAN)
@@ -183,6 +182,7 @@ export function AppShell({
         { href: `${base}/langues`, label: "Langues", icon: Languages, roles: MGR, tag: "Nouveau" },
         { href: `${base}/whatsapp`, label: "WhatsApp", icon: Smartphone, roles: MGR },
         { href: `${base}/integrations/whatsapp-catalogue`, label: "Catalogue WhatsApp", icon: Boxes, roles: MGR, tag: "Nouveau" },
+        { href: `${base}/integrations/tiktok-shop`, label: "TikTok Shop", icon: Clapperboard, roles: MGR, tag: "Nouveau" },
         { href: `${base}/integrations/ia`, label: "Connecteurs IA", icon: Bot, roles: MGR, tag: "Nouveau" },
         { href: `${base}/applications`, label: "Applications", icon: Blocks, roles: MGR, tag: "Nouveau" },
         { href: `${base}/developpeurs`, label: "Développeurs", icon: Users, roles: ["OWNER"], tag: "Nouveau" },

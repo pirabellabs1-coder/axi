@@ -9,7 +9,7 @@ import { guard, parseForm, fail, success, zBool, type ActionResult } from "@/lib
 import { PLANS } from "@/config/plans";
 import { audit } from "@/lib/audit";
 import { rateLimit } from "@/lib/rate-limit";
-import { readSettings } from "./feed-items";
+import { cleanGoogleCategory, readSettings } from "./feed-items";
 import { invalidateFeedCache } from "./feeds";
 import { FEED_CHANNELS, SYNC_CHANNEL, requestCatalogSync, type FeedChannel } from "./sync";
 
@@ -49,6 +49,13 @@ export async function setCatalogFeed(storeId: string, channel: FeedChannel, enab
 const optionsSchema = z.object({
   storeId: z.string().min(8).max(64),
   brand: z.string().trim().max(70, "70 caractères au maximum").optional().default(""),
+  googleProductCategory: z
+    .string()
+    .trim()
+    .max(250, "250 caractères au maximum")
+    .optional()
+    .default("")
+    .refine((v) => v === "" || cleanGoogleCategory(v) !== null, "Indiquez un numéro de catégorie Google ou un chemin « Niveau 1 > Niveau 2 »"),
   includeOutOfStock: zBool,
 });
 
@@ -60,7 +67,7 @@ export async function saveCatalogOptions(_prev: ActionResult | undefined, formDa
     const ctx = await requireStore(parsed.data.storeId, "integrations.manage");
     const plan = PLANS[ctx.planId];
     if (!plan.features.catalogFeeds && !plan.features.catalogSync) return fail(upsell(plan.name, "La gestion des catalogues"));
-    const settings = readSettings({ brand: parsed.data.brand, includeOutOfStock: parsed.data.includeOutOfStock });
+    const settings = readSettings({ brand: parsed.data.brand, includeOutOfStock: parsed.data.includeOutOfStock, googleProductCategory: parsed.data.googleProductCategory });
     const json = settings as unknown as Prisma.InputJsonValue;
     await db.$transaction(async (tx) => {
       for (const channel of [...FEED_CHANNELS, SYNC_CHANNEL]) {
@@ -71,7 +78,7 @@ export async function saveCatalogOptions(_prev: ActionResult | undefined, formDa
         });
       }
     });
-    await audit({ storeId: ctx.store.id, actorId: ctx.user.id, action: "catalog.options_updated", metadata: { includeOutOfStock: settings.includeOutOfStock, brand: settings.brand } });
+    await audit({ storeId: ctx.store.id, actorId: ctx.user.id, action: "catalog.options_updated", metadata: { includeOutOfStock: settings.includeOutOfStock, brand: settings.brand, googleProductCategory: settings.googleProductCategory } });
     invalidateFeedCache(ctx.store.id);
     revalidatePath(page(ctx.store.id));
     return success(undefined, "Options enregistrées");

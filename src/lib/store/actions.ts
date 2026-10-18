@@ -6,14 +6,15 @@ import { checkImageWrite } from "@/lib/storage/write-guard";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
-import { db } from "@/lib/db";
-import { requireUserOrThrow, requireStore, effectivePlanId } from "@/lib/auth/permissions";
+import { db, type Tx } from "@/lib/db";
+import { requireUserOrThrow, requireStore } from "@/lib/auth/permissions";
 import { fail, success, parseForm, guard, zBool, zOptionalString, zMoneyText, readMoneyFields, type ActionResult } from "@/lib/action";
 import { slugify, normalizePhone, addDays } from "@/lib/utils";
 import { currencyDecimals } from "@/lib/money";
 import { COUNTRIES, RESERVED_SLUGS, getCountry } from "@/config/site";
-import { TRIAL_DAYS, TRIAL_PLAN, ZONE_CURRENCY, planRank, zoneForCurrency } from "@/config/plans";
-import { checkStoresQuota, quotaMessage } from "@/lib/commerce/quotas";
+import { TRIAL_DAYS, TRIAL_PLAN, ZONE_CURRENCY, zoneForCurrency } from "@/config/plans";
+import { getAccountStoresQuota, lockAccountForStoreCreation, storeWithinAccountLimit } from "@/lib/store/account-quota-service";
+import { OVER_STORE_LIMIT_REASON, type AccountStoresQuota } from "@/lib/store/account-quota";
 import { audit } from "@/lib/audit";
 import { enqueue } from "@/lib/jobs";
 import { getPreset } from "@/lib/storefront/theme";
@@ -45,6 +46,14 @@ const createSchema = z.object({
   doneForYou: zBool,
 });
 
+/** Message de refus côté serveur (l'assistant affiche l'écran de paiement avant d'en arriver là). */
+function storesQuotaMessage(q: AccountStoresQuota): string {
+  const head = `Limite de boutiques atteinte : ${q.used}/${q.limit ?? "illimité"}.`;
+  return q.canBuyExtra
+    ? `${head} Ajoutez d'abord une place « Boutique en plus » (paiement), puis créez votre boutique.`
+    : `${head} Passez au plan Business pour ouvrir d'autres boutiques.`;
+}
+
 export async function isSlugAvailable(slug: string): Promise<{ available: boolean; reason?: string }> {
   const s = slugify(slug);
   if (s.length < 3) return { available: false, reason: "3 caractères minimum" };
@@ -68,13 +77,11 @@ export async function createStore(_prev: ActionResult | undefined, formData: For
     const avail = await isSlugAvailable(slug);
     if (!avail.available) return fail(`Adresse de boutique indisponible : ${avail.reason}`, { slug: [avail.reason ?? ""] });
 
-    // Quota boutiques : basé sur le meilleur plan des boutiques possédées (la première boutique bénéficie de l'essai)
-    const owned = await db.membership.findMany({ where: { userId: user.id, role: "OWNER" }, include: { store: { include: { subscription: true } } } });
-    const bestPlan = owned.map((m) => effectivePlanId(m.store.subscription)).sort((a, b) => planRank(b) - planRank(a))[0] ?? "FREE";
-    const isFirstStore = owned.length === 0;
-    const quota = await checkStoresQuota(user.id, isFirstStore ? TRIAL_PLAN : bestPlan);
-    if (!quota.allowed) return fail(quotaMessage(quota));
-
+    // Quota boutiques au niveau du COMPTE : meilleur plan des boutiques possédées + options « Boutique en plus »
+    // en vigueur sur toutes ces boutiques. Pré-contrôle ici (message rapide), contrôle faisant foi dans la transaction.
+    const pre = await getAccountStoresQuota(user.id);
+    if (!pre.allowed) return fail(storesQuotaMessage(pre));
+    const isFirstStore = pre.firstStore;
     const c = getCountry(country);
     // Zone tarifaire Axi : suit la DEVISE choisie pour la boutique (plateforme internationale) — une boutique en EUR
     // voit et paie les offres Axi en EUR, une boutique en XOF/XAF en FCFA.
@@ -83,6 +90,10 @@ export async function createStore(_prev: ActionResult | undefined, formData: For
     const now = new Date();
 
     const store = await db.$transaction(async (tx) => {
+      // Anti-course : deux créations simultanées du même compte sont sérialisées, puis le quota est relu.
+      await lockAccountForStoreCreation(tx, user.id);
+      const quota = await getAccountStoresQuota(user.id, tx);
+      if (!quota.allowed || quota.firstStore !== isFirstStore) return null;
       const s = await tx.store.create({
         data: {
           name,
@@ -117,6 +128,7 @@ export async function createStore(_prev: ActionResult | undefined, formData: For
       await audit({ storeId: s.id, actorId: user.id, action: "store.created", metadata: { slug, sector, zone, currency, doneForYou } }, tx);
       return s;
     });
+    if (!store) return fail(storesQuotaMessage(await getAccountStoresQuota(user.id)));
     redirect(doneForYou ? `/app/${store.id}/options?addon=DONE_FOR_YOU` : `/app/${store.id}/demarrage`);
   });
 }
@@ -292,6 +304,24 @@ export async function updateOpeningHours(_prev: ActionResult | undefined, formDa
   });
 }
 
+/** La boutique occupe-t-elle une place couverte du compte de son propriétaire (plan + options) ? */
+async function withinOwnerLimit(storeId: string): Promise<boolean> {
+  const owner = await db.membership.findFirst({ where: { storeId, role: "OWNER" }, select: { userId: true } });
+  return !owner || storeWithinAccountLimit(owner.userId, storeId);
+}
+
+/**
+ * Sortie d'archive : la boutique doit trouver une place libre sur le compte de son propriétaire
+ * (verrou du compte + relecture du quota dans la transaction). Renvoie le message de refus, ou null.
+ */
+async function unarchiveDenied(tx: Tx, storeId: string): Promise<string | null> {
+  const owner = await tx.membership.findFirst({ where: { storeId, role: "OWNER" }, select: { userId: true } });
+  if (!owner) return null;
+  await lockAccountForStoreCreation(tx, owner.userId);
+  const q = await getAccountStoresQuota(owner.userId, tx);
+  return q.allowed ? null : storesQuotaMessage(q);
+}
+
 export async function publishStore(storeId: string): Promise<ActionResult> {
   return guard(async () => {
     const ctx = await requireStore(storeId, "store.publish");
@@ -304,15 +334,22 @@ export async function publishStore(storeId: string): Promise<ActionResult> {
     if (methods === 0) missing.push("un moyen de paiement actif");
     if (missing.length) return fail(`Avant de publier, ajoutez ${missing.join(", ")}.`);
     if (s.status === "SUSPENDED") return fail("Boutique suspendue par la plateforme.");
+    if (!(await withinOwnerLimit(storeId))) return fail(OVER_STORE_LIMIT_REASON);
 
-    await db.$transaction(async (tx) => {
+    const refused = await db.$transaction(async (tx) => {
+      if (s.status === "ARCHIVED") {
+        const denied = await unarchiveDenied(tx, storeId);
+        if (denied) return denied;
+      }
       await tx.store.update({
         where: { id: storeId },
         data: { status: "PUBLISHED", publishedAt: s.publishedAt ?? new Date(), onboardingCompleted: true, onboardingStep: 99, statusReason: null },
       });
       await audit({ storeId, actorId: ctx.user.id, action: "store.published" }, tx);
       await enqueue("store.published", { storeId }, { storeId }, tx);
+      return null;
     });
+    if (refused) return fail(refused);
     revalidatePath(`/app/${storeId}`, "layout");
     revalidatePath(`/s/${s.slug}`, "layout");
     revalidatePath("/marketplace");
@@ -324,10 +361,18 @@ export async function setStoreStatus(storeId: string, status: "PUBLISHED" | "CLO
   return guard(async () => {
     const ctx = await requireStore(storeId, status === "ARCHIVED" ? "store.delete" : "store.publish");
     if (ctx.store.status === "SUSPENDED") return fail("Boutique suspendue par la plateforme.");
-    await db.$transaction(async (tx) => {
+    if (status !== "ARCHIVED" && !(await withinOwnerLimit(storeId))) return fail(OVER_STORE_LIMIT_REASON);
+    const refused = await db.$transaction(async (tx) => {
+      // Désarchivage : la boutique reprend une place du compte → même verrou et même contrôle qu'une création.
+      if (ctx.store.status === "ARCHIVED" && status !== "ARCHIVED") {
+        const denied = await unarchiveDenied(tx, storeId);
+        if (denied) return denied;
+      }
       await tx.store.update({ where: { id: storeId }, data: { status, statusReason: reason ?? null } });
       await audit({ storeId, actorId: ctx.user.id, action: `store.status.${status.toLowerCase()}`, metadata: { reason } }, tx);
+      return null;
     });
+    if (refused) return fail(refused);
     revalidatePath(`/app/${storeId}`, "layout");
     revalidatePath(`/s/${ctx.store.slug}`, "layout");
     revalidatePath("/marketplace");

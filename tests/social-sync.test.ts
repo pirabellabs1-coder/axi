@@ -156,6 +156,9 @@ function recordingApi(reject: string[] = []) {
       calls.push({ catalogId, requests });
       return { handles: ["h1"], validation_status: requests.filter((r) => reject.includes(r.data.id)).map((r) => ({ retailer_id: r.data.id, errors: [{ message: "Image trop petite" }] })) };
     },
+    async checkBatchStatus(_catalogId, handle) {
+      return { data: [{ handle, status: "finished", ids_of_invalid_requests: [] }] };
+    },
   };
   return { api, calls };
 }
@@ -205,7 +208,12 @@ describe("runCatalogSync", () => {
 
   it("erreur Graph : backoff, compteur d'échecs, jamais le jeton dans lastError", async () => {
     const token = "EAAGtokenAAAAAAAAAA";
-    const api: CatalogApi = { itemsBatch: async () => { throw new GraphCatalogError(`Meta 401 : token ${token} invalid`, 401, 190); } };
+    const api: CatalogApi = {
+      itemsBatch: async () => {
+        throw new GraphCatalogError(`Meta 401 : token ${token} invalid`, 401, 190);
+      },
+      checkBatchStatus: async () => ({ data: [] }),
+    };
     const r = await runCatalogSync("sync_aaa_wa", { api, now: NOW });
     expect(r.ok).toBe(false);
     const row = syncRow("sync_aaa_wa");

@@ -296,6 +296,10 @@ model Store {
   pushSubscriptions    PushSubscription[]
   liveEvents           LiveEvent[]
   digitalAssets        DigitalAsset[]
+  // Commerce en direct « commenter pour acheter » (Page Facebook / Instagram pro)
+  socialAccounts       SocialAccount[]
+  liveKeywords         LiveKeyword[]
+  liveClaims           LiveClaim[]
   downloadGrants       DownloadGrant[]
 
   // Lot 3 : operations (depots, expedition, caisse)
@@ -551,6 +555,8 @@ model Product {
   prices          ProductPrice[]
   digitalAssets   DigitalAsset[]
   inventoryLevels InventoryLevel[]
+  liveKeywords    LiveKeyword[]
+  liveClaims      LiveClaim[]
 
   @@unique([storeId, slug])
   @@index([storeId, status])
@@ -578,6 +584,8 @@ model Variant {
   inventoryMoves  InventoryMovement[]
   digitalAssets   DigitalAsset[]
   inventoryLevels InventoryLevel[]
+  liveKeywords    LiveKeyword[]
+  liveClaims      LiveClaim[]
 
   @@index([productId])
 }
@@ -2855,9 +2863,140 @@ model LiveEvent {
   createdById String?
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
-  store       Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  // « Commenter pour acheter » (docs/LIVE-COMMERCE.md) : réglages du direct.
+  claimsEnabled         Boolean  @default(false)
+  // Délai de paiement d'une réservation, en minutes (5 à 60).
+  claimHoldMinutes      Int      @default(30)
+  // Plafond d'unités réservées par auteur social sur ce direct (anti-spam, 1 à 5).
+  claimMaxPerAuthor     Int      @default(2)
+  // Plafond global d'unités réservées NON payées par produit sur le direct : nombre fixe, sinon % du stock (anti-blocage)
+  claimActiveCapUnits   Int?
+  claimActiveCapPercent Int      @default(30)
+  // Message privé (modèle avec {nom} {produit} {quantite} {total} {lien} {delai}) ; null = texte par défaut.
+  claimMessage          String?
+  // Réponse publique au commentaire (« Réservé, regardez vos messages ») ; texte null = défaut.
+  claimPublicReply      Boolean  @default(false)
+  claimPublicText       String?
+  // Vidéos en direct / publications Meta reliées (ids Graph) ; vide = toutes les publications des comptes connectés.
+  socialObjectIds       String[] @default([])
+
+  store    Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  keywords LiveKeyword[]
+  claims   LiveClaim[]
 
   @@index([storeId, startsAt])
+}
+
+enum SocialPlatform {
+  FACEBOOK
+  INSTAGRAM
+}
+
+enum LiveClaimStatus {
+  RESERVED // stock retenu, message privé pas (encore) envoyé
+  MESSAGED // réponse privée envoyée avec le lien de paiement
+  PAID // commande payée
+  EXPIRED // délai dépassé sans commande : stock rendu
+  CANCELLED // annulée par le marchand : stock rendu
+}
+
+/// Compte social Meta relié à UNE boutique (Page Facebook ou compte Instagram professionnel lié à cette Page).
+/// `(platform, externalId)` est unique sur la plateforme : routage strict des webhooks vers la boutique propriétaire.
+model SocialAccount {
+  id             String         @id @default(cuid())
+  storeId        String
+  platform       SocialPlatform
+  // Page ID (FACEBOOK) ou identifiant du compte Instagram professionnel (INSTAGRAM)
+  externalId     String
+  // Page Facebook porteuse du jeton (pour INSTAGRAM : la Page liée au compte)
+  pageId         String
+  name           String
+  username       String?
+  // Jeton de Page chiffré (encryptSecret), jamais renvoyé au client
+  tokenEncrypted String
+  scopes         String[]       @default([])
+  status         String         @default("active") // active | error
+  lastError      String?
+  connectedById  String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  store          Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  claims         LiveClaim[]
+
+  @@unique([platform, externalId])
+  @@index([storeId])
+}
+
+/// Mot-clé d'un direct : « 12 » → produit (et variante). Unique par direct (forme normalisée).
+model LiveKeyword {
+  id          String    @id @default(cuid())
+  storeId     String
+  liveEventId String
+  code        String
+  productId   String
+  variantId   String?
+  createdAt   DateTime  @default(now())
+  store       Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  liveEvent   LiveEvent @relation(fields: [liveEventId], references: [id], onDelete: Cascade)
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant     Variant?  @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([liveEventId, code])
+  @@index([storeId])
+}
+
+/// Réservation née d'un commentaire. Un seul claim par commentaire (`platform, commentId`).
+/// `heldQuantity` = unités actuellement retirées du stock par la réservation (0 une fois rendues ou passées au panier).
+model LiveClaim {
+  id              String          @id @default(cuid())
+  storeId         String
+  liveEventId     String
+  socialAccountId String?
+  platform        SocialPlatform
+  commentId       String
+  objectId        String?
+  authorId        String
+  authorName      String?
+  commentText     String
+  code            String
+  productId       String
+  variantId       String?
+  productName     String
+  variantName     String?
+  quantity        Int
+  // Prix unitaire indicatif au moment du commentaire (le checkout recalcule tout côté serveur)
+  unitPrice       Int
+  currency        String
+  heldQuantity    Int             @default(0)
+  status          LiveClaimStatus @default(RESERVED)
+  // Jeton du lien court /l/{token}
+  token           String          @unique
+  cartId          String?         @unique
+  orderId         String?
+  // Réponse privée : verrou d'envoi (une seule tentative à la fois), id du message et destinataire (id à portée de Page/IG)
+  replyLockedAt   DateTime?
+  messageId       String?
+  recipientId     String?
+  messagedAt      DateTime?
+  publicRepliedAt DateTime?
+  remindedAt      DateTime?
+  lastError       String?
+  expiresAt       DateTime
+  paidAt          DateTime?
+  closedAt        DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  store           Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  liveEvent       LiveEvent       @relation(fields: [liveEventId], references: [id], onDelete: Cascade)
+  socialAccount   SocialAccount?  @relation(fields: [socialAccountId], references: [id], onDelete: SetNull)
+  product         Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant         Variant?        @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@unique([platform, commentId])
+  @@index([storeId, liveEventId, createdAt])
+  @@index([liveEventId, platform, authorId])
+  @@index([status, expiresAt])
 }
 
 // ─────────────────────────── Lot 3 : opérations ───────────────────────────

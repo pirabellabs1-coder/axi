@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
 import { Printer, Smartphone, Landmark, CreditCard, ShieldCheck } from "lucide-react";
 import { getStoreContext } from "@/lib/auth/permissions";
 import { db } from "@/lib/db";
@@ -15,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { ManualPayBox, OnlinePayButton } from "../../plans-client";
 import { INV_LABEL, INV_TONE } from "../../billing-ui";
 import { PrintButton } from "./print-button";
+import { getAccountStoresQuota } from "@/lib/store/account-quota-service";
 
 export const metadata: Metadata = { title: "Facture" };
 
@@ -42,6 +44,10 @@ export default async function InvoicePage({
   const subtotal = lines.filter((l) => l.amount > 0).reduce((s, l) => s + l.amount, 0);
   const sameDay = inv.periodEnd.getTime() - inv.periodStart.getTime() < 86_400_000;
   const [bank, momoNumber] = await Promise.all([platformBankDetails(), platformMomoNumber()]);
+  // Parcours « payer d'abord » d'une nouvelle boutique : une fois la place payée, retour automatique sur l'assistant.
+  const isExtraStore = isAddOn && !!(await db.addOnPurchase.findFirst({ where: { invoiceId: inv.id, storeId: store.id, addOnId: "EXTRA_STORE" }, select: { id: true } }));
+  const slotFree = isExtraStore && inv.status === "PAID" ? (await getAccountStoresQuota(ctx.user.id)).allowed : false;
+  if (slotFree && (retour || option)) redirect("/app/nouvelle-boutique?debloquee=1");
 
   return (
     <>
@@ -63,6 +69,16 @@ export default async function InvoicePage({
           {isChange && payable && (
             <Alert tone="warning" title={`Plan ${PLANS[inv.planId as PlanId].name} en attente de paiement`}>
               Votre plan actuel reste en place. Le plan {PLANS[inv.planId as PlanId].name} démarre dès la confirmation du paiement de cette facture, pour une période complète à partir de cette date.
+            </Alert>
+          )}
+          {isExtraStore && inv.status !== "PAID" && (
+            <Alert tone="info" title="Nouvelle boutique">
+              Dès que ce paiement est confirmé, une place de boutique est ajoutée à votre compte et vous pourrez créer votre boutique.
+            </Alert>
+          )}
+          {slotFree && (
+            <Alert tone="success" title="Place de boutique disponible">
+              <Link href="/app/nouvelle-boutique?debloquee=1" className="font-medium underline underline-offset-4">Créer ma nouvelle boutique</Link>
             </Alert>
           )}
           {inv.status === "PAID" && (

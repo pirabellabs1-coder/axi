@@ -21,7 +21,9 @@ export function FeedUrl({ url, label }: { url: string; label: string }) {
   );
 }
 
-export function CatalogOptionsForm({ storeId, brand, includeOutOfStock, storeName, disabled }: { storeId: string; brand: string; includeOutOfStock: boolean; storeName: string; disabled?: boolean }) {
+export function CatalogOptionsForm({
+  storeId, brand, includeOutOfStock, googleProductCategory, storeName, disabled,
+}: { storeId: string; brand: string; includeOutOfStock: boolean; googleProductCategory: string; storeName: string; disabled?: boolean }) {
   const [state, action] = useActionState(saveCatalogOptions, undefined);
   return (
     <form action={action} noValidate className="space-y-5">
@@ -29,6 +31,14 @@ export function CatalogOptionsForm({ storeId, brand, includeOutOfStock, storeNam
       <input type="hidden" name="storeId" value={storeId} />
       <Field id="brand" label="Marque affichée" error={fieldError(state, "brand")} hint={`Laissez vide pour utiliser la marque du produit, sinon « ${storeName} ».`}>
         {(p) => <Input {...p} name="brand" defaultValue={brand} maxLength={70} autoComplete="off" disabled={disabled} />}
+      </Field>
+      <Field
+        id="googleProductCategory"
+        label="Catégorie Google (facultatif)"
+        error={fieldError(state, "googleProductCategory")}
+        hint="Numéro ou chemin de la taxonomie Google, par exemple 2271 ou « Apparel & Accessories > Clothing ». Aide Google Shopping, YouTube, Meta et TikTok à classer vos produits."
+      >
+        {(p) => <Input {...p} name="googleProductCategory" defaultValue={googleProductCategory} maxLength={250} autoComplete="off" spellCheck={false} disabled={disabled} />}
       </Field>
       <Checkbox
         name="includeOutOfStock"

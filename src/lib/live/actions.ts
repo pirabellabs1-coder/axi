@@ -13,6 +13,7 @@ import { clientIp, rateLimitAll } from "@/lib/rate-limit";
 import { getCountry } from "@/config/site";
 import { normalizePhone } from "@/lib/utils";
 import { parseStreamUrl, reminderCampaignName, reminderTag, STREAM_PLATFORMS } from "./stream";
+import { releaseLiveHolds } from "./claims";
 
 /**
  * Actions du live shopping (lot 4 §18).
@@ -125,6 +126,8 @@ export async function deleteLiveEvent(storeId: string, eventId: string): Promise
   return guard(async () => {
     const { ctx, error } = await liveContext(storeId);
     if (error) return error;
+    // « Commenter pour acheter » : le stock retenu par les réservations en attente est rendu avant la suppression.
+    await releaseLiveHolds(ctx.store.id, eventId);
     const res = await db.liveEvent.deleteMany({ where: { id: eventId, storeId: ctx.store.id } });
     if (res.count === 0) return fail("Direct introuvable");
     await audit({ storeId: ctx.store.id, actorId: ctx.user.id, action: "live.deleted", target: eventId });

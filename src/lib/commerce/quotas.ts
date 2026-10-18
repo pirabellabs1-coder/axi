@@ -41,11 +41,6 @@ export async function checkMembersQuota(storeId: string, planId: PlanId): Promis
   return { allowed: limit == null || used < limit, used, limit, metric: "members" };
 }
 
-export async function checkStoresQuota(userId: string, planId: PlanId): Promise<QuotaCheck> {
-  const limit = PLANS[planId].limits.stores;
-  const used = await db.membership.count({ where: { userId, role: "OWNER", store: { status: { not: "ARCHIVED" } } } });
-  return { allowed: limit == null || used < limit, used, limit, metric: "stores" };
-}
 
 export function quotaMessage(q: QuotaCheck): string {
   const names: Record<string, string> = { orders: "commandes ce mois-ci", products: "produits", members: "membres d'équipe", stores: "boutiques" };

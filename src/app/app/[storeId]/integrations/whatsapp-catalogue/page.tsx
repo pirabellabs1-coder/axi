@@ -22,7 +22,7 @@ export const metadata: Metadata = { title: "Catalogue WhatsApp et flux" };
 
 const FEEDS: Record<FeedChannel, { name: string; where: string }> = {
   meta: { name: "Meta (WhatsApp, Facebook, Instagram)", where: "Commerce Manager, Catalogue, Sources de données, Flux de données programmé" },
-  google: { name: "Google Merchant Center", where: "Merchant Center, Produits, Sources de données, Fichier récupéré à heure fixe" },
+  google: { name: "Google Merchant Center (Google, YouTube)", where: "Merchant Center, Produits, Sources de données, Fichier récupéré à heure fixe" },
   tiktok: { name: "TikTok Catalog", where: "TikTok Ads Manager, Catalogues, Ajouter des produits, Flux de données (CSV)" },
 };
 
@@ -186,7 +186,14 @@ export default async function WhatsappCataloguePage({ params }: { params: Promis
           <h2 id="options-title" className="mb-4 text-lg font-semibold tracking-[-0.02em] text-ink">Options du catalogue</h2>
           <Card>
             <CardBody>
-              <CatalogOptionsForm storeId={store.id} brand={status.settings.brand ?? ""} includeOutOfStock={status.settings.includeOutOfStock} storeName={store.name} disabled={!canManage} />
+              <CatalogOptionsForm
+                storeId={store.id}
+                brand={status.settings.brand ?? ""}
+                includeOutOfStock={status.settings.includeOutOfStock}
+                googleProductCategory={status.settings.googleProductCategory ?? ""}
+                storeName={store.name}
+                disabled={!canManage}
+              />
             </CardBody>
           </Card>
         </section>
@@ -273,7 +280,14 @@ export default async function WhatsappCataloguePage({ params }: { params: Promis
                 .
               </li>
               <li>
-                <strong>Google et TikTok.</strong> Activez leur flux et collez l&apos;adresse dans Merchant Center ou TikTok Ads Manager. Renseignez-y aussi vos frais de livraison.
+                <strong>Google et TikTok.</strong> Activez leur flux et collez l&apos;adresse dans Merchant Center ou TikTok Ads Manager. Renseignez-y aussi vos frais de livraison et vos pays de vente. Les produits de Merchant Center servent aussi aux annonces Shopping sur YouTube.
+              </li>
+              <li>
+                <strong>Instagram.</strong> Le catalogue Meta alimente aussi la Boutique Instagram (après approbation par Meta). Pour identifier vos produits sur vos publications, voir{" "}
+                <Link href={`/app/${store.id}/integrations/instagram-produits`} className="font-medium text-primary underline-offset-4 hover:underline">
+                  Produits sur Instagram
+                </Link>
+                .
               </li>
             </ol>
             <div className="mt-5 flex flex-wrap gap-2">

@@ -7,6 +7,10 @@ import { Logo } from "@/components/ui/logo";
 import { ButtonLink } from "@/components/ui/button";
 import { Avatar, StatusDot } from "@/components/ui/misc";
 import { UserMenu } from "@/components/app/user-menu";
+import { Alert } from "@/components/ui/misc";
+import { db } from "@/lib/db";
+import { enforceAccountStoreLimit, getAccountStoresQuota } from "@/lib/store/account-quota-service";
+import { OVER_STORE_LIMIT_REASON, storesQuotaLabel } from "@/lib/store/account-quota";
 
 export const metadata = { title: "Vos boutiques" };
 
@@ -24,6 +28,12 @@ export default async function AppHome() {
   // Le super-administrateur n'est pas un commerçant : sans boutique, il va sur sa console.
   if (stores.length === 0) redirect(user.isPlatformAdmin ? "/admin" : "/app/nouvelle-boutique");
   if (stores.length === 1) redirect(`/app/${stores[0].id}`);
+  // Fin de période d'une option « Boutique en plus » : les boutiques au-delà de la limite du compte sont dépubliées.
+  await enforceAccountStoreLimit(user.id).catch(() => undefined);
+  const [quota, overLimit] = await Promise.all([
+    getAccountStoresQuota(user.id),
+    db.store.findMany({ where: { id: { in: stores.map((s) => s.id) }, status: "DRAFT", statusReason: OVER_STORE_LIMIT_REASON }, select: { id: true, name: true } }),
+  ]);
 
   return (
     <div className="min-h-dvh">
@@ -38,13 +48,23 @@ export default async function AppHome() {
           <div>
             <h1 className="text-[30px] font-semibold tracking-[-0.035em] text-ink">Vos boutiques</h1>
             <p className="mt-1 text-sm text-ink-muted">
-              {stores.length} boutiques sur votre compte. Choisissez celle à gérer.
+              {stores.length} boutiques accessibles{quota.firstStore ? "" : `, dont ${storesQuotaLabel(quota)} possédées`}. Choisissez celle à gérer.
             </p>
           </div>
           <ButtonLink href="/app/nouvelle-boutique" variant="accent" trailing={Plus}>
             Nouvelle boutique
           </ButtonLink>
         </div>
+        {overLimit.length > 0 && (
+          <Alert tone="warning" title="Boutique hors limite, mise hors ligne" className="mb-6">
+            {overLimit.map((s) => s.name).join(", ")} : {OVER_STORE_LIMIT_REASON}{" "}
+            {quota.primaryStoreId && (
+              <Link href={`/app/${quota.primaryStoreId}/options`} className="font-medium underline underline-offset-4">
+                Voir les options
+              </Link>
+            )}
+          </Alert>
+        )}
         <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {stores.map((s) => (
             <li key={s.id}>

@@ -15,6 +15,13 @@ export const schema: SectionSchema = {
     { type: "textarea", id: "text", label: "Texte d'introduction", default: "", maxLength: 300 },
     { type: "checkbox", id: "show_reminder", label: "Proposer « Me rappeler sur WhatsApp »", default: true, info: "Le client laisse son numéro et reçoit un message au début du direct (consentement enregistré)." },
     { type: "checkbox", id: "hide_when_none", label: "Masquer la section si aucun direct n'est prévu", default: true },
+    {
+      type: "checkbox",
+      id: "show_player",
+      label: "Afficher le lecteur vidéo pendant le direct",
+      default: true,
+      info: "YouTube et Facebook (et les vidéos TikTok ou Instagram) se regardent sur la boutique ; le lecteur ne se charge qu'au clic du client. Les directs TikTok et Instagram s'ouvrent dans l'application.",
+    },
     SCHEME,
     ...PADDING,
   ],
